@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Student Profile</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('materials') }}">Study Materials</a>
+        <a href="{{ url_for('profile') }}">My Profile</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+
+        <button type="button"
+                id="theme-toggle"
+                class="theme-toggle"
+                aria-pressed="false">
+            🌙 Dark mode
+        </button>
+    </nav>
+    <main class="profile-container">
+        <h1>My Student Profile</h1>
+        <p>View and update your student information.</p>
+
+        {% if error %}
+            <p class="profile-error">{{ error }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('profile') }}">
+            <label for="name">Full Name</label>
+            <input
+                type="text"
+                id="name"
+                name="name"
+                value="{{ student['name'] }}"
+                required
+            >
+
+            <label for="email">Email Address</label>
+            <input
+                type="email"
+                id="email"
+                value="{{ student['email'] }}"
+                readonly
+            >
+            <small>Your email address cannot be changed here.</small>
+
+            <label for="department">Department</label>
+            <input
+                type="text"
+                id="department"
+                name="department"
+                value="{{ student['department'] or '' }}"
+                placeholder="e.g. Software Development"
+            >
+
+            <label for="level">Level</label>
+            <input
+                type="text"
+                id="level"
+                name="level"
+                value="{{ student['level'] or '' }}"
+                placeholder="e.g. 200 Level"
+            >
+
+            <label for="bio">About Me</label>
+            <textarea
+                id="bio"
+                name="bio"
+                rows="4"
+                maxlength="500"
+                placeholder="Tell us briefly about your learning goals."
+            >{{ student['bio'] or '' }}</textarea>
+
+            <button type="submit">Save Profile</button>
+        </form>
+
+        <p><a href="{{ url_for('dashboard') }}">Back to Dashboard</a></p>
+    </main>
+
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

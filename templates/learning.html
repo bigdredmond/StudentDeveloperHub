@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{{ page.title }} | Student Developer Hub</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('materials') }}">Study Materials</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+
+        <button type="button"
+                id="theme-toggle"
+                class="theme-toggle"
+                aria-pressed="false">
+            🌙 Dark mode
+        </button>
+    </nav>
+
+    <main class="learning-page">
+
+        <header class="learning-header">
+            <a href="{{ url_for('materials') }}" class="learning-back">
+                ← Back to Study Materials
+            </a>
+
+            <h1>{{ page.title }}</h1>
+            <p>{{ page.intro }}</p>
+        </header>
+
+        <section class="learning-lessons">
+            <h2>Your Lessons</h2>
+
+            <div class="lesson-filters">
+                <button type="button" class="level-filter active"
+                        data-level="All">
+                    All Lessons
+                </button>
+
+                <button type="button" class="level-filter"
+                        data-level="Beginner">
+                    Beginner
+                </button>
+
+                <button type="button" class="level-filter"
+                        data-level="Intermediate">
+                    Intermediate
+                </button>
+
+                <button type="button" class="level-filter"
+                        data-level="Advanced">
+                    Advanced
+                </button>
+            </div>
+
+            <div class="learning-progress">
+                <p>
+                    Completed: {{ completed_count }} of {{ total_lessons }} lessons
+                </p>
+
+                <progress value="{{ progress_percentage }}" max="100"></progress>
+
+                <p>{{ progress_percentage }}% complete</p>
+            </div>
+
+            {% for lesson in page.lessons %}
+            <article class="learning-lesson"
+                     data-level="{{ lesson.level }}">
+                {% set lesson_index = loop.index0 %}
+
+                <p>
+                    {% if lesson_index in completed_lessons %}
+                        <strong>✓ Completed</strong>
+                    {% else %}
+                        <strong>Not completed yet</strong>
+                    {% endif %}
+                </p>
+
+                <p class="lesson-level">{{ lesson.level }}</p>
+                <h3>{{ lesson.title }}</h3>
+
+                <p>{{ lesson.explanation }}</p>
+
+                <h4>Example</h4>
+
+                <pre><code>{{ lesson.example }}</code></pre>
+
+                <details class="lesson-output">
+                    <summary>View expected output or result</summary>
+                    <pre><code>{{ lesson.output }}</code></pre>
+                </details>
+
+                {% if lesson_index not in completed_lessons %}
+                    <form method="POST"
+                          action="{{ url_for('complete_lesson',
+                                            topic=topic,
+                                            lesson_index=lesson_index) }}">
+                        <button type="submit" class="learning-button">
+                            Mark as Completed
+                        </button>
+                    </form>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </section>
+
+        <section class="learning-finish">
+            <h2>Keep Learning!</h2>
+
+            <p>
+                Review the examples, practise them yourself,
+                and make sure you understand each lesson.
+            </p>
+
+            <a href="{{ url_for('materials') }}"
+               class="learning-button">
+                Explore Other Subjects →
+            </a>
+        </section>
+
+        <section class="learning-resources">
+            <h2>Recommended Resources</h2>
+
+            <p>Explore these trusted resources to deepen your knowledge.</p>
+
+            {% for resource in page.get("resources", []) %}
+               <p>
+                    <a href="{{ resource.url }}"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        {{ resource.title }} ↗
+                    </a>
+                </p>
+            {% endfor %}
+        </section>
+
+    </main>
+
+<script>
+    const filterButtons = document.querySelectorAll(".level-filter");
+    const lessons = document.querySelectorAll(".learning-lesson");
+
+    filterButtons.forEach(button => {
+        button.addEventListener("click", function () {
+            const selectedLevel = this.dataset.level;
+
+            filterButtons.forEach(item => {
+                item.classList.remove("active");
+            });
+
+            this.classList.add("active");
+
+            lessons.forEach(lesson => {
+                const matches =
+                    selectedLevel === "All" ||
+                    lesson.dataset.level === selectedLevel;
+
+                lesson.style.display = matches ? "" : "none";
+            });
+        });
+    });
+</script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

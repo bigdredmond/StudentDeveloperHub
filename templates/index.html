@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Developer Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+</head>
+
+<body>
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="#">Home</a>
+        <a href="#">Courses</a>
+        <a href="#">Quizzes</a>
+        <a href="#">Projects</a>
+        <a href="/register">Register</a>
+    </nav>
+
+    <section Class="hero">
+        <h1>Learn. Practice. Build. Grow</h1>
+
+        <p>
+            Your learning platform for software and web development students.
+        </p>
+
+        <a href="{{ url_for('login') }}" class="get-started">
+            Get started
+        </a>
+    </section>

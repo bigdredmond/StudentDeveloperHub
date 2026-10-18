@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <div class="dashboard-layout">
+
+        <aside class="profile-sidebar">
+            <a href="/profile" class="profile-card">
+                <span class="profile-avatar">👤</span>
+                <span>My Profile</span>
+            </a>
+        </aside>
+
+        <div class="dashboard-main">
+            <nav>
+                <h2 class="brand-title">
+                    🎓 Student Developer Hub
+                </h2>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/logout">Logout</a>
+
+                <div class="nav-actions">
+                    <a href="{{ url_for('reviews') }}" class="review-nav-link">
+                        ⭐ Student Reviews
+                    </a>
+
+                    <button type="button" id="theme-toggle" class="theme-toggle">
+                        🌙 Dark mode
+                    </button>
+                </div>
+            </nav>
+
+            
+
+            <section class="hero developer-hero">
+                <div class="hero-content">
+                    <span class="hero-label">YOUR DEVELOPER JOURNEY</span>
+
+                    <h1>Welcome back, {{ name }}! 👋</h1>
+
+                    <p class="hero-message">
+                       Every expert developer started as a beginner.
+                       Keep learning, keep building, and turn your ideas into reality.
+                    </p>
+                </div>
+
+                <div class="hero-code" aria-hidden="true">
+                    <span class="code-comment">// Your next big idea starts here</span>
+                    <pre><code>while (learning) {
+                build();
+                improve();
+                repeat();
+            }</code></pre>
+                    <span class="code-status">
+                        <span class="status-dot"></span>
+                        Ready to build
+                    </span>
+                </div>
+            </section>
+
+            <!-- Dashboard Statistics -->
+            <section class="dashboard-stats">
+
+                <div class="stat-card">
+                    <div class="stat-icon">📚</div>
+                    <p>Lessons Completed</p>
+                    <h2>{{ lessons_completed }}</h2>
+                    <span>Keep going, you're doing great!</span>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📋</div>
+                    <p>Quiz Attempts</p>
+                    <h2>{{ quiz_attempts }}</h2>
+                    <span>Test your knowledge</span>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <p>Average Quiz Score</p>
+                    <h2>{{ average_quiz_score }}%</h2>
+                    <span>Keep improving!</span>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🎯</div>
+                    <p>Learning Progress</p>
+                    <h2>{{ learning_progress }}%</h2>
+                    <span>Every lesson counts</span>
+                </div>
+
+            </section>
+
+            <section class="features">
+
+                <div class="card">
+                    <h3>📚 Study Materials</h3>
+                    <p>Explore programming notes and learning resources.</p>
+                    <a href="/materials">Open Study Materials</a>
+                </div>
+
+                <div class="card">
+                    <h3>🧠 Practice Quizzes</h3>
+                    <p>Test your knowledge and improve your skills.</p>
+                    <a href="/quiz">Start Quiz</a>
+                </div>
+
+                <div class="card">
+                    <h3>💻 Project Ideas</h3>
+                    <p>Discover useful projects to build your skills.</p>
+                    <a href="/projects">Explore Project Ideas</a>
+                </div>
+
+                <div class="card">
+                    <h3>📈 My Progress</h3>
+                    <p>Review your quiz scores and learning progress.</p>
+                    <a href="/progress">View My Progress</a>
+                </div>
+
+                <!-- QUIZ LEADERBOARD CARD -->
+                <div class="card">
+                    <h3>🏆 Quiz Leaderboard</h3>
+
+                    <p>
+                        View student rankings and compare your best quiz
+                        scores with other students.
+                    </p>
+
+                    <a href="{{ url_for('leaderboard') }}">
+                        View Leaderboard →
+                    </a>
+                </div>
+
+                <div class="card">
+                    <h3>🤖 Study-Help Chatbot</h3>
+                    <p>Ask programming questions and get help with your studies.</p>
+                    <a href="{{ url_for('chatbot') }}">Ask the Assistant</a>
+                </div>
+        
+        
+                </section>
+     <!-- Keep your existing hero section and other dashboard content here -->
+        </div>
+    </div>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

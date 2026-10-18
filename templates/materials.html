@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Study Materials - Student Developer Hub</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/materials">Study Materials</a>
+        <a href="/logout">Logout</a>
+
+        <button type="button" id="theme-toggle" class="theme-toggle">
+            🌙 Dark mode
+        </button>
+    </nav>
+
+    <section class="hero">
+        <h1>Study Materials 📚</h1>
+        <p>Learn programming, web development, databases, and more.</p>
+    </section>
+    <!-- Material Search -->
+    <section class="material-search">
+        <h2>Find Learning Materials</h2>
+
+        <input
+            type="search"
+            id="materialSearch"
+            placeholder="Search Python, Flask, HTML, databases..."
+            aria-label="Search learning materials"
+        >
+
+        <p id="searchMessage" aria-live="polite">
+        Browse all available learning materials.
+        </p>
+    </section>
+    <h2>New Learning Materials</h2>
+
+    <div class="material-grid">
+    {% for material in materials %}
+        <div class="material-card">
+            <h3>{{ material["title"] }}</h3>
+
+            <p>{{ material["description"] }}</p>
+
+            <a href="{{ material['link'] }}"
+               target="_blank"
+               rel="noopener noreferrer">
+                Open Learning Resource
+            </a>
+        </div>
+    {% else %}
+        <p>No learning materials have been added yet.</p>
+    {% endfor %}
+
+    </div>
+
+    <section class="materials-section">
+
+        <input
+            type="text"
+            id="search"
+            placeholder="Search for a subject..."
+            onkeyup="searchMaterials()"
+        >
+
+        <div class="materials-grid">
+
+            <div class="material-card">
+                <h3>🐍 Python Programming</h3>
+                <p>Learn Python basics, variables, conditions, loops, and functions.</p>
+                <a href="/learn/python">Start Learning Python</a>
+            </div>
+
+            <div class="material-card">
+                <h3>🌐 HTML & CSS</h3>
+                <p>Learn how to structure and style attractive websites.</p>
+                <h4>What You Will Learn</h4>
+                <ul>
+                    <li>HTML document structure</li>
+                    <li>Headings, paragraphs, links, and images</li>
+                    <li>CSS colors, fonts, and backgrounds</li>
+                    <li>Flexbox and CSS Grid layouts</li>
+                    <li>Responsive website design</li>
+                </ul>
+
+                <a href="/learn/html-css">
+                   Start Learning HTML & CSS 
+                </a>
+            </div>
+
+            <div class="material-card">
+                <h3>⚡ JavaScript</h3>
+                <p>Learn how to make websites interactive.</p>
+                <h4>What You Will Learn</h4>
+
+                <ul>
+                    <li>Introduction to JavaScript</li>
+                    <li>Variables and data types</li>
+                    <li>Operators and conditional statement</li>
+                    <li>Loops and functions</li>
+                    <li>Arrays and objects</li>
+                    <li>DOM manipulation</li>
+                    <li>Events and interactive websites</li>
+                </ul>
+
+                <a href="/learn/javascript">
+                   Start Learning Javascript
+                </a>
+            </div>
+
+            <div class="material-card">
+                <h3>🗄️ Database Systems</h3>
+                <p>Understand tables, records, SQL, and database relationships.</p>
+
+                <h4>What You Will Learn</h4>
+
+                <ul>
+                    <li>Introduction to database systems</li>
+                    <li>Tables, rows, columns, and data types</li>
+                    <li>Primary keys and foreign keys</li>
+                    <li>SQL commands: SELECT, INSERT, UPDATE, and DELETE</li>
+                    <li>Creating and managing database tables</li>
+                    <li>Database relationships and JOIN operations</li>
+                    <li>Using SQLite with Python</li>
+                </ul>
+
+                <a href="/learn/database">
+                    Start Learning Database Systems
+                </a>
+            </div>
+
+            <div class="material-card">
+                <h3>💻 Software Engineering</h3>
+                <p>Learn software development processes and testing.</p>
+
+                <h4>What You Will Learn</h4>
+
+                <ul>
+                    <li>Introduction to Software Engineering</li>
+                    <li>Software Development Life Cycle (SDLC)</li>
+                    <li>Requirement gathering and analysis</li>
+                    <li>System design and documentation</li>
+                    <li>Software development methodologies</li>
+                    <li>Software testing and debugging</li>
+                    <li>Software maintainance and teamwork</li>
+                    <li>Version control using Git</li>
+                </ul>
+
+                <a href="/learn/software-engineering">
+                    Start Learning Software Engineering
+                </a>
+            </div>
+
+        </div>
+
+    </section>
+
+    <section class="topic-section">
+
+        <h2 id="python">🐍 Python Programming</h2>
+        <p><strong>Variables:</strong> Variables store information in a program.</p>
+        <p><strong>Conditions:</strong> Conditions allow a program to make decisions.</p>
+        <p><strong>Loops:</strong> Loops repeat instructions.</p>
+        <p><strong>Functions:</strong> Functions organize reusable blocks of code.</p>
+
+        <h2 id="web">🌐 HTML & CSS</h2>
+        <p><strong>HTML:</strong> Defines the structure of a webpage.</p>
+        <p><strong>CSS:</strong> Controls the appearance of a webpage.</p>
+
+        <h2 id="javascript">⚡ JavaScript</h2>
+        <p>JavaScript makes webpages interactive and dynamic.</p>
+
+        <h2 id="database">🗄️ Database Systems</h2>
+        <p>Databases store and organize information for applications.</p>
+
+        <h2 id="software">💻 Software Engineering</h2>
+        <p>Software engineering involves designing, building, testing, and maintaining software.</p>
+
+    </section>
+
+    <script>
+        function searchMaterials() {
+            let input = document.getElementById("search").value.toLowerCase();
+            let cards = document.querySelectorAll(".material-card");
+
+            cards.forEach(function(card) {
+                let text = card.textContent.toLowerCase();
+
+                card.style.display = text.includes(input) ? "" : "none";
+            });
+        }
+    </script>
+    <script>
+        const searchInput = document.getElementById("materialSearch");
+        const searchMessage = document.getElementById("searchMessage");
+        const cards = document.querySelectorAll(".material-card");
+
+        searchInput.addEventListener("input", function () {
+            const query = searchInput.value.trim().toLowerCase();
+            let matches = 0;
+
+            cards.forEach(function (card) {
+                const text = card.textContent.toLowerCase();
+                const found = text.includes(query);
+
+                card.style.display = found ? "" : "none";
+
+                 if (found) {
+                matches++;
+                 }
+            });
+
+            if (query === "") {
+            searchMessage.textContent =
+                "Browse all available learning materials.";
+            } else {
+            searchMessage.textContent =
+                matches + (matches === 1
+                    ? " matching result found."
+                    : " matching results found.");
+            }
+        });
+    </script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

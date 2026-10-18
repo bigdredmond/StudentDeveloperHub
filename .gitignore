@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+.env
+.env.*
+!.env.example
+
+students.db
+*.db
+*.sqlite
+*.sqlite3
+
+instance/
+.pytest_cache/
+# Database backup files
+*.bak
+*.backup
+*.sqlite.bak
+*.db.bak
+StudentDeveloperHub_Backups/
+backup/
+backups/

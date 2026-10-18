@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Leaderboard | Student Developer Hub</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <main class="container leaderboard-page">
+        <section class="hero">
+            <h1>🏆 Quiz Leaderboard</h1>
+            <p>Celebrate your learning progress and achievements.</p>
+        </section>
+
+        <section class="leaderboard-section">
+            <h2>Top Student Scores</h2>
+
+            {% if leaderboard %}
+                <div class="leaderboard-table-wrapper">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Student</th>
+                                <th>Best Score</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for student in leaderboard %}
+                            <tr>
+                                <td>
+                                    {% if student.rank == 1 %}
+                                        🥇 1st
+                                    {% elif student.rank == 2 %}
+                                        🥈 2nd
+                                    {% elif student.rank == 3 %}
+                                        🥉 3rd
+                                    {% else %}
+                                        {{ student.rank }}
+                                    {% endif %}
+                                </td>
+
+                                <td>{{ student.name }}</td>
+
+                                <td>{{ student.percentage }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>
+                    No quiz results are available yet.
+                    Complete a quiz to appear on the leaderboard!
+                </p>
+            {% endif %}
+
+            <a href="{{ url_for('dashboard') }}"
+               class="leaderboard-back-link">
+                ← Back to Dashboard
+            </a>
+        </section>
+    </main>
+
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Progress</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/materials">Study Materials</a>
+        <a href="/quiz">Practice Quiz</a>
+        <a href="/projects">Project Ideas</a>
+        <a href="/logout">Logout</a>
+
+        <button type="button"
+                id="theme-toggle"
+                class="theme-toggle"
+                aria-pressed="false">
+            🌙 Dark mode
+        </button>
+    </nav>
+
+    <section class="topic-section">
+        <h1>My Learning Progress</h1>
+        <p>Review your saved Python quiz results below.</p>
+
+        {% if results %}
+            <table>
+                <tr>
+                    <th>Date</th>
+                    <th>Score</th>
+                    <th>Percentage</th>
+                </tr>
+                {% for result in results %}
+                <tr>
+                    <td>{{ result["date_taken"] }}</td>
+                    <td>{{ result["score"] }}/5</td>
+                    <td>{{ result["percentage"] }}%</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <h3>Quiz attempts: {{ results|length }}</h3>
+            <h3>Average score: {{ average }}%</h3>
+        {% else %}
+            <p>You have no saved quiz results yet. Take a quiz to get started!</p>
+        {% endif %}
+
+        <p><a href="/quiz">Take another quiz</a></p>
+    </section>
+
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

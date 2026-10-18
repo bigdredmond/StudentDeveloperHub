@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Practice Quiz</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <h2>Student Developer Hub</h2>
+
+        <a href="/dashboard">Dashboard</a>
+        <a href="/materials">Study Materials</a>
+        <a href="/profile">My Profile</a>
+        <a href="/progress">My Progress</a>
+        <a href="/quiz">Practice Quiz</a>
+        <a href="/projects">Project Ideas</a>
+        <a href="/logout">Logout</a>
+
+        <button type="button"
+            id="theme-toggle"
+            class="theme-toggle"
+            aria-pressed="false">
+        🌙 Dark mode
+        </button>
+    </nav>
+
+    <section class="topic-section">
+        <h1>Python Practice Quiz</h1>
+        <p>Answer all 20 questions. New questions are randomly selected for each attempt.</p>
+
+        {% if questions and score is not defined %}
+            <form action="/quiz" method="POST">
+                {% for q in questions %}
+                    {% set i = loop.index %}
+                    <div class="quiz-question">
+                        <p>
+                            <b>{{ i }}. {{ q.question }}</b>
+                        </p>
+                        <p><small>Difficulty: {{ q.difficulty }}</small></p>
+
+                        {% for option in q.options %}
+                            <label>
+                                <input
+                                    type="radio"
+                                    name="q{{ i }}"
+                                    value="{{ ['a', 'b', 'c'][loop.index0] }}"
+                                    {% if loop.first %}required{% endif %}
+                                >
+                                {{ option }}
+                            </label>
+                            <br>
+                        {% endfor %}
+                    </div>
+                    <hr>
+                {% endfor %}
+
+                <button type="submit">Submit Answers</button>
+            </form>
+
+        {% elif score is defined %}
+            <h2>Your Result: {{ score }}/20</h2>
+            <p>Percentage: {{ percentage }}%</p>
+            <p>{{ feedback }}</p>
+
+            <h2>Review Your Answers</h2>
+
+            {% for result in results %}
+                <div class="quiz-question">
+                    <p>
+                        <b>{{ result.number }}. {{ result.question }}</b>
+                    </p>
+
+                    {% if result.is_correct %}
+                        <p>Correct!</p>
+                    {% else %}
+                        <p>Not quite. Keep learning!</p>
+                    {% endif %}
+
+                    <p>
+                        <b>Correct answer:</b>
+                        {{ result.options[['a', 'b', 'c'].index(result.correct_answer)] }}
+                    </p>
+
+                    <p>
+                        <b>Explanation:</b> {{ result.explanation }}
+                    </p>
+                </div>
+                <hr>
+            {% endfor %}
+
+            <a href="/quiz">Try Another Quiz</a>
+
+        {% else %}
+            <p>No questions are available. Please try again.</p>
+            <a href="/quiz">Start Quiz</a>
+        {% endif %}
+    </section>
+
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

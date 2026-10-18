@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Reviews | Student Developer Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+    <style>
+        .reviews-container {
+            max-width: 800px;
+            margin: 35px auto;
+            padding: 20px;
+        }
+
+        .review-card {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px var(--shadow-color);
+        }
+
+        .review-card h2 {
+            margin-top: 0;
+        }
+
+        .review-form label {
+            display: block;
+            margin: 16px 0 8px;
+            font-weight: bold;
+        }
+
+        .review-form select,
+        .review-form textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            font: inherit;
+        }
+
+        .review-form textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .review-form button {
+            margin-top: 18px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            font: inherit;
+            font-weight: bold;
+        }
+
+        .review-form button:hover {
+            background: var(--primary-hover);
+        }
+
+        .review-stars {
+            color: #e5a000;
+            font-size: 20px;
+        }
+
+        .review-meta {
+            color: var(--muted-color);
+            font-size: 14px;
+        }
+
+        .review-message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .review-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .review-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .review-summary {
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="chatbot-nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('materials') }}">Study Materials</a>
+        <a href="{{ url_for('chatbot') }}">Learning Chatbot</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+
+    <main class="reviews-container">
+        <h1>Student Reviews ⭐</h1>
+        <p>Share your experience and help us improve Student Developer Hub.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="review-message review-{{ category }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <section class="review-card">
+            <h2>Rate Our Website</h2>
+            <p>How helpful has Student Developer Hub been for your learning?</p>
+
+            <form class="review-form" method="POST"
+                  action="{{ url_for('reviews') }}">
+                <label for="rating">Your rating</label>
+                <select id="rating" name="rating" required>
+                    <option value="">Choose a rating</option>
+                    <option value="5">★★★★★ — Excellent</option>
+                    <option value="4">★★★★ — Very good</option>
+                    <option value="3">★★★ — Good</option>
+                    <option value="2">★★ — Fair</option>
+                    <option value="1">★ — Needs improvement</option>
+                </select>
+
+                <label for="review_text">Your feedback</label>
+                <textarea id="review_text" name="review_text"
+                          maxlength="1000" required
+                          placeholder="Tell us what you like or what we can improve..."></textarea>
+
+                <button type="submit">Submit Review</button>
+            </form>
+        </section>
+
+        <section class="review-card">
+            <h2>What Students Think</h2>
+
+            <p class="review-summary">
+                Average rating:
+                {{ average_rating|round(1) }}/5
+                ({{ review_count }} reviews)
+            </p>
+
+            {% if reviews %}
+                {% for review in reviews %}
+                    <article>
+                        <h3>{{ review["name"] }}</h3>
+                        <div class="review-stars">
+                            {{ "★" * review["rating"] }}{{ "☆" * (5 - review["rating"]) }}
+                        </div>
+                        <p>{{ review["review_text"] }}</p>
+                        <p class="review-meta">
+                            {{ review["date_submitted"] }}
+                        </p>
+                    </article>
+                    <hr>
+                {% endfor %}
+            {% else %}
+                <p>No reviews yet. You can be the first to share your feedback!</p>
+            {% endif %}
+        </section>
+
+        <p>
+            <a href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+        </p>
+    </main>
+
+</body>
+</html>

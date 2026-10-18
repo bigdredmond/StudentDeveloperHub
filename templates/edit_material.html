@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Learning Material</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <main class="container">
+        <h1>Edit Learning Material</h1>
+
+        <form method="POST">
+            <label for="title">Title</label>
+            <input
+                type="text"
+                id="title"
+                name="title"
+                value="{{ material['title'] }}"
+                required
+            >
+
+            <label for="description">Description</label>
+            <textarea
+                id="description"
+                name="description"
+                required
+            >{{ material['description'] }}</textarea>
+
+            <label for="link">HTTPS Resource Link</label>
+            <input
+                type="url"
+                id="link"
+                name="link"
+                value="{{ material['link'] }}"
+                required
+            >
+
+            <button type="submit">Save Changes</button>
+        </form>
+
+        <p><a href="/admin/dashboard">Back to Admin Dashboard</a></p>
+    </main>
+
+</body>
+</html>

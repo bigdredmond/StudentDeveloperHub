@@ -1,0 +1,2662 @@
+from flask import Flask, render_template, request, redirect, session, url_for, flash
+from werkzeug.security import generate_password_hash, check_password_hash
+import sqlite3
+import os
+
+app = Flask(__name__)
+
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "")
+
+app.config["ADMIN_USERNAME"] = os.environ.get("ADMIN_USERNAME", "admin")
+app.config["ADMIN_PASSWORD"] = os.environ.get("ADMIN_PASSWORD", "")
+
+if not app.secret_key:
+    raise RuntimeError(
+        "FLASK_SECRET_KEY environment variable is not configured."
+    )
+# Connect to the database
+def get_db():
+    conn = sqlite3.connect("students.db", timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+# Create the database
+def create_database():
+    conn = get_db()
+
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                score INTEGER NOT NULL,
+                percentage INTEGER NOT NULL,
+                date_taken TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id)
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS materials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                link TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS lesson_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                topic TEXT NOT NULL,
+                lesson_index INTEGER NOT NULL,
+                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, topic, lesson_index),
+                FOREIGN KEY (student_id)
+                    REFERENCES students(id)
+                    ON DELETE CASCADE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                rating INTEGER NOT NULL
+                    CHECK (rating BETWEEN 1 AND 5),
+                review_text TEXT NOT NULL,
+                date_submitted TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id)
+                    REFERENCES students(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        columns = [
+            ("department", "TEXT DEFAULT ''"),
+            ("level", "TEXT DEFAULT ''"),
+            ("bio", "TEXT DEFAULT ''")
+        ]
+
+        existing_columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(students)"
+            ).fetchall()
+        }
+
+        for column_name, column_type in columns:
+            if column_name not in existing_columns:
+                conn.execute(
+                    f"ALTER TABLE students ADD COLUMN "
+                    f"{column_name} {column_type}"
+                )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+# Homepage
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+# Registration
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    message = ""
+
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+
+        if not name or not email or not password:
+            message = "Please fill in all fields."
+        else:
+            conn = get_db()
+
+            try:
+                hashed_password = generate_password_hash(password)
+
+                conn.execute(
+                    "INSERT INTO students (name, email, password) VALUES (?, ?, ?)",
+                    (name, email, hashed_password)
+                )
+
+                conn.commit()
+                return redirect("/login")
+
+            except sqlite3.IntegrityError:
+                message = "This email is already registered."
+
+            finally:
+                conn.close()
+
+    return render_template("register.html", message=message)
+
+
+# Login
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    message = ""
+
+    if request.method == "POST":
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+
+        conn = get_db()
+        student = conn.execute(
+            "SELECT * FROM students WHERE email = ?",
+            (email,)
+        ).fetchone()
+        conn.close()
+
+        if student and check_password_hash(student["password"], password):
+            session.clear()
+            session["student_id"] = student["id"]
+            session["student_name"] = student["name"]
+
+            return redirect("/dashboard")
+
+        message = "Incorrect email or password."
+
+    return render_template("login.html", message=message)
+
+
+# Student dashboard
+@app.route("/dashboard")
+def dashboard():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    student_id = session["student_id"]
+
+    # Count quiz attempts and calculate average score
+    conn = get_db()
+
+    try:
+        quiz_stats = conn.execute("""
+            SELECT
+                COUNT(*) AS attempts,
+                AVG(percentage) AS average_score
+            FROM quiz_results
+            WHERE student_id = ?
+        """, (student_id,)).fetchone()
+
+        # Count the student's completed lessons
+        lesson_stats = conn.execute("""
+            SELECT COUNT(*) AS completed_count
+            FROM lesson_progress
+            WHERE student_id = ?
+        """, (student_id,)).fetchone()
+
+        quiz_attempts = quiz_stats["attempts"]
+        average_quiz_score = round(
+            quiz_stats["average_score"] or 0
+        )
+
+        lessons_completed = lesson_stats["completed_count"]
+
+    finally:
+        conn.close()
+
+    # Count all available lessons in the learning pages
+    total_lessons = sum(
+        len(page["lessons"])
+        for page in learning_pages.values()
+    )
+
+    # Calculate overall learning progress
+    learning_progress = round(
+        (lessons_completed / total_lessons) * 100
+    ) if total_lessons else 0
+
+    return render_template(
+        "dashboard.html",
+        name=session["student_name"],
+        quiz_attempts=quiz_attempts,
+        average_quiz_score=average_quiz_score,
+        lessons_completed=lessons_completed,
+        learning_progress=learning_progress
+    )
+@app.route("/materials")
+def materials():
+    if "student_id" not in session:
+        return redirect("/login")
+    conn = get_db()
+    materials = conn.execute(
+        "SELECT * FROM materials ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
+
+    return render_template(
+        "materials.html",
+        materials=materials
+    )
+
+@app.route("/projects")
+def projects():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    return render_template("projects.html")
+
+# Logout
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+# Start the application
+import random
+
+PYTHON_QUESTIONS = [
+    {
+        "question": "Which function displays output in Python?",
+        "options": ["show()", "print()", "display()"],
+        "answer": "b",
+        "explanation": "print() displays information on the screen.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which symbol starts a Python comment?",
+        "options": ["//", "#", "*"],
+        "answer": "b",
+        "explanation": "Python uses # for single-line comments.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which type stores whole numbers?",
+        "options": ["str", "list", "int"],
+        "answer": "c",
+        "explanation": "int represents integer values such as 5 and -2.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which keyword defines a function?",
+        "options": ["function", "def", "make"],
+        "answer": "b",
+        "explanation": "Use def followed by a function name.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which operator checks equality?",
+        "options": ["=", "==", "!="],
+        "answer": "b",
+        "explanation": "== compares values; = assigns a value.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which function accepts keyboard input?",
+        "options": ["input()", "enter()", "get()"],
+        "answer": "a",
+        "explanation": "input() reads text entered by the user.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which type represents True or False?",
+        "options": ["str", "bool", "float"],
+        "answer": "b",
+        "explanation": "bool has two values: True and False.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which operator multiplies numbers?",
+        "options": ["+", "/", "*"],
+        "answer": "c",
+        "explanation": "The * operator performs multiplication.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which keyword begins a conditional statement?",
+        "options": ["if", "repeat", "define"],
+        "answer": "a",
+        "explanation": "if runs a block when a condition is true.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which keyword adds another condition after if?",
+        "options": ["next", "elif", "then"],
+        "answer": "b",
+        "explanation": "elif means 'else if' in Python.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which loop commonly iterates through a list?",
+        "options": ["for", "define", "select"],
+        "answer": "a",
+        "explanation": "A for loop can process each list item.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which brackets create a list?",
+        "options": ["{ }", "( )", "[ ]"],
+        "answer": "c",
+        "explanation": "Lists use square brackets.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "What is the first index of a Python list?",
+        "options": ["1", "0", "-1"],
+        "answer": "b",
+        "explanation": "Python list indexing begins at zero.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which method adds an item to a list's end?",
+        "options": ["append()", "add_end()", "insert_end()"],
+        "answer": "a",
+        "explanation": "append(item) adds an item to the end.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which keyword sends a value back from a function?",
+        "options": ["print", "return", "break"],
+        "answer": "b",
+        "explanation": "return sends a result back to the caller.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which function returns the number of list items?",
+        "options": ["count_all()", "size()", "len()"],
+        "answer": "c",
+        "explanation": "len(items) returns the number of items.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which structure stores key-value pairs?",
+        "options": ["dictionary", "integer", "string"],
+        "answer": "a",
+        "explanation": "Dictionaries map keys to values.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "Which keyword imports a module?",
+        "options": ["include", "import", "using"],
+        "answer": "b",
+        "explanation": "import makes module functionality available.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "Which keyword begins exception handling?",
+        "options": ["try", "repeat", "switch"],
+        "answer": "a",
+        "explanation": "try contains code that may raise an exception.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What groups statements into a Python code block?",
+        "options": ["Brackets only", "Indentation", "Semicolons only"],
+        "answer": "b",
+        "explanation": "Indentation defines Python code blocks.",
+        "difficulty": "Beginner"
+    },
+    {
+        "question": "What is the result of 10 // 3?",
+        "options": ["3", "3.33", "1"],
+        "answer": "a",
+        "explanation": "// performs floor division, giving 3 here.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What does range(3) produce when iterated?",
+        "options": ["1, 2, 3", "0, 1, 2", "0, 1, 2, 3"],
+        "answer": "b",
+        "explanation": "range(3) yields 0, 1, and 2.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What does len('code') return?",
+        "options": ["3", "4", "5"],
+        "answer": "b",
+        "explanation": "The string 'code' contains four characters.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What does a function parameter represent?",
+        "options": [
+            "An input name in the function definition",
+            "A loop",
+            "A database table"
+        ],
+        "answer": "a",
+        "explanation": "Parameters receive values supplied to a function.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "Which keyword skips to the next loop iteration?",
+        "options": ["stop", "continue", "return"],
+        "answer": "b",
+        "explanation": "continue skips the rest of the current iteration.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "Which file mode appends text to a file?",
+        "options": ["'r'", "'w'", "'a'"],
+        "answer": "c",
+        "explanation": "The 'a' mode adds content at the end.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What does a list comprehension create?",
+        "options": [
+            "A list from an expression and an iterable",
+            "A database connection",
+            "A function definition"
+        ],
+        "answer": "a",
+        "explanation": "It builds a list concisely from an iterable.",
+        "difficulty": "Advanced"
+    },
+    {
+        "question": "What does a Python class primarily define?",
+        "options": ["A reusable object blueprint", "A comment", "A loop"],
+        "answer": "a",
+        "explanation": "A class defines attributes and methods for objects.",
+        "difficulty": "Intermediate"
+    },
+    {
+        "question": "What does a decorator commonly do?",
+        "options": [
+            "Modifies or extends a function's behaviour",
+            "Deletes a database",
+            "Converts every value to text"
+        ],
+        "answer": "a",
+        "explanation": "A decorator wraps or modifies a callable.",
+        "difficulty": "Advanced"
+    },
+    {
+        "question": "Why use a parameterized SQL query?",
+        "options": [
+            "To make every query public",
+            "To safely pass values into SQL",
+            "To remove all database tables"
+        ],
+        "answer": "b",
+        "explanation": "Parameters help prevent SQL injection.",
+        "difficulty": "Advanced"
+    }
+]
+
+
+@app.route("/quiz", methods=["GET", "POST"])
+def quiz():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    conn = get_db()
+    try:
+        student = conn.execute(
+            "SELECT id FROM students WHERE id = ?",
+            (session["student_id"],)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if student is None:
+        session.clear()
+        return redirect("/login")
+
+    if request.method == "POST":
+        questions = session.get("quiz_questions")
+
+        if not questions or len(questions) != 20:
+            session.pop("quiz_questions", None)
+            return redirect("/quiz")
+
+        score = 0
+        results = []
+
+        for i, question in enumerate(questions, start=1):
+            selected = request.form.get(f"q{i}", "")
+            correct = selected == question["answer"]
+
+            if correct:
+                score += 1
+
+            results.append({
+                "number": i,
+                "question": question["question"],
+                "selected": selected,
+                "correct_answer": question["answer"],
+                "options": question["options"],
+                "is_correct": correct,
+                "explanation": question["explanation"]
+            })
+
+        percentage = round((score / len(questions)) * 100)
+
+        conn = get_db()
+        try:
+            conn.execute(
+                """INSERT INTO quiz_results
+                   (student_id, score, percentage)
+                   VALUES (?, ?, ?)""",
+                (session["student_id"], score, percentage)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        session.pop("quiz_questions", None)
+
+        if score == 20:
+            feedback = "Excellent! You answered every question correctly!"
+        elif score >= 15:
+            feedback = "Very good work! Keep practising."
+        elif score >= 10:
+            feedback = "Good effort! Review your lessons and try again."
+        else:
+            feedback = "Keep learning! Review your materials and try again."
+
+        return render_template(
+            "quiz.html",
+            questions=questions,
+            results=results,
+            score=score,
+            percentage=percentage,
+            feedback=feedback
+        )
+
+    questions = random.sample(PYTHON_QUESTIONS, 20)
+    session["quiz_questions"] = questions
+
+    return render_template(
+        "quiz.html",
+        questions=questions
+    )
+def get_chatbot_answer(question):
+    import re
+
+    # Clean the student's question without losing its meaning.
+    text = question.lower().strip()
+    text = re.sub(r"[?!.,;:]+", " ", text)
+    text = " ".join(text.split())
+
+    # Work out what kind of help the student wants.
+    if any(word in text for word in [
+        "practice", "quiz me", "test me", "exercise", "exercises"
+    ]):
+        intent = "practice"
+    elif any(word in text for word in [
+        "mistake", "common error", "debug", "debugging",
+        "not working", "error", "bug"
+    ]):
+        intent = "mistakes"
+    elif any(phrase in text for phrase in [
+        "real life", "real-life", "used in real life",
+        "practical use", "application", "useful for"
+    ]):
+        intent = "real_life"
+    elif any(word in text for word in [
+        "example", "examples", "show me", "demonstrate"
+    ]):
+        intent = "example"
+    elif any(word in text for word in [
+        "how", "steps", "process", "create", "build"
+    ]):
+        intent = "how"
+    else:
+        intent = "explain"
+
+    # Each topic has its own explanation, example,
+    # practical use, practice question, and common mistake.
+    lessons = {
+        "variable": {
+            "name": "Python variables",
+            "explain": (
+                "A variable is a name used to store a value.\n\n"
+                "Example: age = 20\n\n"
+                "The name age refers to the value 20. "
+                "You can use the variable later in your program."
+            ),
+            "example": (
+                "name = 'Ada'\n"
+                "age = 20\n"
+                "print(name)\n"
+                "print(age)\n\n"
+                "Output:\nAda\n20\n\n"
+                "Text is placed inside quotation marks."
+            ),
+            "real_life": (
+                "A school application can store a student's name, "
+                "department, and level in variables. The program can "
+                "then display those details when needed."
+            ),
+            "how": (
+                "1. Choose a meaningful variable name.\n"
+                "2. Use = to assign a value.\n"
+                "3. Use the variable in your code.\n\n"
+                "Example: score = 75"
+            ),
+            "mistakes": (
+                "Common mistakes include misspelling a variable name "
+                "and using a variable before assigning a value.\n\n"
+                "For example, student_name and studentname are "
+                "different names in Python."
+            ),
+            "practice": (
+                "Practice: Create a variable called department, "
+                "store 'Software Development' in it, and print it."
+            )
+        },
+
+        "loop": {
+            "name": "Python loops",
+            "explain": (
+                "A loop repeats instructions. It helps you avoid "
+                "writing the same code many times.\n\n"
+                "A for loop is useful for going through a sequence. "
+                "A while loop repeats while its condition is true."
+            ),
+            "example": (
+                "for number in range(1, 4):\n"
+                "    print(number)\n\n"
+                "Output:\n1\n2\n3\n\n"
+                "range(1, 4) produces 1, 2, and 3. "
+                "The number 4 is not included."
+            ),
+            "real_life": (
+                "A school system could use a loop to display the "
+                "names of many students, one after another, instead "
+                "of writing a separate print statement for each name."
+            ),
+            "how": (
+                "1. Choose what should repeat.\n"
+                "2. Write a for or while loop.\n"
+                "3. Indent the instructions inside the loop.\n\n"
+                "Use for when working through a sequence. "
+                "Use while when repetition depends on a condition."
+            ),
+            "mistakes": (
+                "Common mistakes include incorrect indentation, "
+                "using the wrong range, and creating a while loop "
+                "whose condition never becomes false."
+            ),
+            "practice": (
+                "Practice: Write a for loop that prints the numbers "
+                "1 to 5. Hint: range(1, 6) includes 1 through 5."
+            )
+        },
+
+        "function": {
+            "name": "Python functions",
+            "explain": (
+                "A function is a reusable block of code that performs "
+                "a task. It helps organise a program and reduces "
+                "repetition."
+            ),
+            "example": (
+                "def greet(name):\n"
+                "    return 'Hello ' + name\n\n"
+                "print(greet('Ada'))\n\n"
+                "Output: Hello Ada\n\n"
+                "def defines the function. name is a parameter, "
+                "and return sends a result back."
+            ),
+            "real_life": (
+                "A school system could have a function that calculates "
+                "a student's average score. The same function can be "
+                "used for many students."
+            ),
+            "how": (
+                "1. Write def followed by a function name.\n"
+                "2. Add parentheses and any parameters.\n"
+                "3. Indent the function body.\n"
+                "4. Call the function when you need it."
+            ),
+            "mistakes": (
+                "Common mistakes include forgetting the parentheses "
+                "when calling a function, incorrect indentation, "
+                "and expecting print() to return a value."
+            ),
+            "practice": (
+                "Practice: Create a function called add that accepts "
+                "two numbers and returns their sum."
+            )
+        },
+
+        "list": {
+            "name": "Python lists",
+            "explain": (
+                "A list stores multiple items in one variable. "
+                "Lists use square brackets, and their positions "
+                "start at index 0."
+            ),
+            "example": (
+                "subjects = ['Python', 'HTML', 'Database']\n"
+                "print(subjects[0])\n\n"
+                "Output: Python\n\n"
+                "Use append() to add an item, for example "
+                "subjects.append('CSS')."
+            ),
+            "real_life": (
+                "A school application can store a list of subjects "
+                "a student is studying."
+            ),
+            "how": (
+                "Create a list using square brackets, separate "
+                "items with commas, and access an item by its index."
+            ),
+            "mistakes": (
+                "A common mistake is using an index that does not "
+                "exist. For a list with three items, valid indexes "
+                "are 0, 1, and 2."
+            ),
+            "practice": (
+                "Practice: Create a list of three programming "
+                "languages and print the second item."
+            )
+        },
+
+        "html": {
+            "name": "HTML",
+            "explain": (
+                "HTML stands for HyperText Markup Language. "
+                "It structures web page content, such as headings, "
+                "paragraphs, images, and links."
+            ),
+            "example": (
+                "<h1>My Student Website</h1>\n"
+                "<p>Welcome to my website.</p>\n"
+                "<a href='/materials'>Study Materials</a>\n\n"
+                "h1 creates a heading, p creates a paragraph, "
+                "and a creates a link."
+            ),
+            "real_life": (
+                "HTML provides the structure for your Student "
+                "Developer Hub pages, including headings, study "
+                "material links, and forms."
+            ),
+            "how": (
+                "1. Create an HTML file.\n"
+                "2. Add the doctype and html elements.\n"
+                "3. Put page information in head.\n"
+                "4. Put visible content in body."
+            ),
+            "mistakes": (
+                "Common mistakes include missing closing tags, "
+                "incorrectly nested elements, and misspelling "
+                "attribute names."
+            ),
+            "practice": (
+                "Practice: Write an HTML heading that says "
+                "'Welcome' and a paragraph that says 'Start learning'."
+            )
+        },
+
+        "css": {
+            "name": "CSS",
+            "explain": (
+                "CSS stands for Cascading Style Sheets. It controls "
+                "how web pages look, including colours, spacing, "
+                "fonts, borders, and layout."
+            ),
+            "example": (
+                "h1 {\n"
+                "    color: green;\n"
+                "    font-size: 28px;\n"
+                "}\n\n"
+                "This styles h1 headings with green text "
+                "and a font size of 28 pixels."
+            ),
+            "real_life": (
+                "CSS makes Student Developer Hub cards, navigation, "
+                "buttons, and page layouts look consistent."
+            ),
+            "how": (
+                "1. Select an HTML element.\n"
+                "2. Add braces.\n"
+                "3. Write a property and value.\n\n"
+                "Example: p { color: blue; }"
+            ),
+            "mistakes": (
+                "Common mistakes include missing semicolons, "
+                "misspelling properties, and selecting the wrong "
+                "HTML element or class."
+            ),
+            "practice": (
+                "Practice: Write a CSS rule that makes paragraph "
+                "text blue and gives it a font size of 18px."
+            )
+        },
+
+        "javascript": {
+            "name": "JavaScript",
+            "explain": (
+                "JavaScript is a programming language commonly used "
+                "to add interaction to web pages. It can respond "
+                "to clicks, validate forms, and update page content."
+            ),
+            "example": (
+                "let name = 'Ada';\n"
+                "console.log('Hello ' + name);\n\n"
+                "Output: Hello Ada\n\n"
+                "let declares a variable, and console.log() "
+                "writes a message to the console."
+            ),
+            "real_life": (
+                "JavaScript can make a theme toggle respond to a "
+                "click or check a form before it is submitted."
+            ),
+            "how": (
+                "1. Create a JavaScript file ending in .js.\n"
+                "2. Write your JavaScript code.\n"
+                "3. Connect it to HTML with a script element.\n"
+                "4. Test it using your browser's developer tools."
+            ),
+            "mistakes": (
+                "Common mistakes include misspelled variable names, "
+                "missing brackets, and confusing = with == or ===."
+            ),
+            "practice": (
+                "Practice: Create a variable called score with the "
+                "value 80, then display it with console.log()."
+            )
+        },
+
+        "database": {
+            "name": "Databases and SQL",
+            "explain": (
+                "A database stores and organises information. "
+                "A relational database stores data in tables "
+                "containing rows and columns. SQL is used to "
+                "query and manage relational data."
+            ),
+            "example": (
+                "SELECT * FROM students;\n\n"
+                "This retrieves every column and row from a table "
+                "called students. SELECT chooses data, and * means "
+                "all columns."
+            ),
+            "real_life": (
+                "Student Developer Hub uses SQLite to store "
+                "information such as student accounts, quiz results, "
+                "and learning progress."
+            ),
+            "how": (
+                "A simple database workflow is:\n"
+                "1. Create a table.\n"
+                "2. Insert records.\n"
+                "3. Query the records.\n"
+                "4. Update or delete records when appropriate."
+            ),
+            "mistakes": (
+                "Common mistakes include misspelling table names, "
+                "forgetting SQL syntax, and building database queries "
+                "by joining untrusted input directly into SQL. "
+                "Use parameterised queries instead."
+            ),
+            "practice": (
+                "Practice: Write a SQL query to select only the "
+                "name column from a table called students."
+            )
+        },
+
+        "software engineering": {
+            "name": "Software engineering",
+            "explain": (
+                "Software engineering is the organised process "
+                "of designing, building, testing, and maintaining "
+                "software that solves a problem."
+            ),
+            "example": (
+                "For a student learning website:\n"
+                "1. Gather student requirements.\n"
+                "2. Design the pages and database.\n"
+                "3. Write the code.\n"
+                "4. Test the features.\n"
+                "5. Fix problems and maintain the system."
+            ),
+            "real_life": (
+                "Planning Student Developer Hub, testing student "
+                "login, and fixing quiz errors are practical "
+                "software engineering activities."
+            ),
+            "how": (
+                "Start by identifying the problem and users. "
+                "Write requirements, design a solution, implement it, "
+                "test it, and improve it based on feedback."
+            ),
+            "mistakes": (
+                "Common mistakes include coding before understanding "
+                "requirements, skipping tests, and making changes "
+                "without checking existing features."
+            ),
+            "practice": (
+                "Practice: List three requirements for a school "
+                "website and explain how you would test one of them."
+            )
+        },
+
+        "algorithm": {
+            "name": "Algorithms",
+            "explain": (
+                "An algorithm is a clear sequence of steps for "
+                "solving a problem or completing a task."
+            ),
+            "example": (
+                "To find the larger of two numbers:\n"
+                "1. Read both numbers.\n"
+                "2. Compare them.\n"
+                "3. Display the larger number."
+            ),
+            "real_life": (
+                "A school results system can follow an algorithm "
+                "to calculate a student's total and average."
+            ),
+            "how": (
+                "Identify the input, write the steps in order, "
+                "determine the expected output, and test the steps "
+                "with different examples."
+            ),
+            "mistakes": (
+                "Common mistakes include missing a step, ignoring "
+                "special cases, and not testing the algorithm "
+                "with different inputs."
+            ),
+            "practice": (
+                "Practice: Write the steps needed to determine "
+                "whether a number is even or odd."
+            )
+        },
+        "data types": {
+            "name": "Python data types",
+            "explain": (
+                "Data types describe the kind of value stored.\n\n"
+                "str: text, such as 'Ada'\n"
+                "int: whole numbers, such as 25\n"
+                "float: decimal numbers, such as 4.5\n"
+                "bool: True or False\n"
+                "list: a collection of items\n"
+                "dict: key-value pairs"
+            ),
+            "example": (
+                "name = 'Ada'\n"
+                "age = 20\n"
+                "price = 4.5\n"
+                "is_student = True\n\n"
+                "print(type(name))\n"
+                "print(type(age))\n\n"
+                "The output identifies the types of the values."
+            ),
+            "real_life": (
+                "A student record may store a name as text, "
+                "a level as an integer, and an average score "
+                "as a decimal number."
+            ),
+            "how": (
+                "Choose a data type that suits the information. "
+                "Use type(value) to inspect a value's type."
+            ),
+            "mistakes": (
+                "Remember that '20' is text, while 20 is an "
+                "integer. Convert between types when needed."
+            ),
+            "practice": (
+                "Practice: Create one string, one integer, "
+                "one float, and one Boolean variable."
+            )
+        },
+
+        "conditionals": {
+            "name": "Python conditional statements",
+            "explain": (
+                "Conditional statements let a program make decisions. "
+                "Python uses if, elif, and else to choose which "
+                "instructions to run."
+            ),
+            "example": (
+                "score = 70\n"
+                "if score >= 50:\n"
+                "    print('Pass')\n"
+                "else:\n"
+                "    print('Try again')\n\n"
+                "Output: Pass"
+            ),
+            "real_life": (
+                "A school application can check a score and display "
+                "whether a student passed a course."
+            ),
+            "how": (
+                "1. Write if followed by a condition.\n"
+                "2. Add a colon.\n"
+                "3. Indent the instructions.\n"
+                "4. Add elif or else when needed."
+            ),
+            "mistakes": (
+                "Common mistakes include forgetting the colon "
+                "and using incorrect indentation."
+            ),
+            "practice": (
+                "Practice: Write an if statement that prints "
+                "'Adult' when age is at least 18."
+            )
+        },
+
+        "dictionaries": {
+            "name": "Python dictionaries",
+            "explain": (
+                "A dictionary stores information as key-value pairs. "
+                "Each key is used to look up its associated value."
+            ),
+            "example": (
+                "student = {'name': 'Ada', 'level': 200}\n"
+                "print(student['name'])\n\n"
+                "Output: Ada"
+            ),
+            "real_life": (
+                "A dictionary can represent a student's name, "
+                "department, and level in one structure."
+            ),
+            "how": (
+                "Create a dictionary with braces, separate keys "
+                "and values using colons, and separate pairs "
+                "using commas."
+            ),
+            "mistakes": (
+                "A KeyError can occur when you try to access "
+                "a key that does not exist. Check the key or "
+                "use the dictionary get() method."
+            ),
+            "practice": (
+                "Practice: Create a dictionary containing a student's "
+                "name and department, then print the department."
+            )
+        },
+
+        "html forms": {
+            "name": "HTML forms",
+            "explain": (
+                "HTML forms collect information from users. "
+                "They can contain text fields, labels, buttons, "
+                "checkboxes, and other input controls."
+            ),
+            "example": (
+                "<form>\n"
+                "  <label for='name'>Name</label>\n"
+                "  <input id='name' name='name' type='text'>\n"
+                "  <button type='submit'>Send</button>\n"
+                "</form>\n\n"
+                "The label describes the field, and the button "
+                "submits the form."
+            ),
+            "real_life": (
+                "Registration and login pages use forms to collect "
+                "student details."
+            ),
+            "how": (
+                "Add a form element, include labelled inputs, "
+                "choose appropriate input types, and configure "
+                "how the form submits its information."
+            ),
+            "mistakes": (
+                "Use matching label and input IDs. Give inputs "
+                "meaningful name attributes so their values can "
+                "be submitted."
+            ),
+            "practice": (
+                "Practice: Create an HTML form with a labelled "
+                "email field and a submit button."
+            )
+        },
+
+        "css flexbox": {
+            "name": "CSS Flexbox",
+            "explain": (
+                "Flexbox is a CSS layout system that arranges items "
+                "in a row or column. It helps align items and "
+                "distribute available space."
+            ),
+            "example": (
+                ".container {\n"
+                "    display: flex;\n"
+                "    justify-content: center;\n"
+                "    align-items: center;\n"
+                "    gap: 12px;\n"
+                "}\n\n"
+                "This arranges child items in a row by default, "
+                "with spacing and alignment."
+            ),
+            "real_life": (
+                "Flexbox can align navigation links, buttons, "
+                "or profile details on a dashboard."
+            ),
+            "how": (
+                "Apply display: flex to a parent container. "
+                "Then use properties such as gap, justify-content, "
+                "align-items, and flex-direction."
+            ),
+            "mistakes": (
+                "Remember that Flexbox alignment applies to the "
+                "container's layout direction. Check the parent "
+                "element and whether flex-direction is row or column."
+            ),
+            "practice": (
+                "Practice: Use Flexbox to place three links in a "
+                "row with space between them."
+            )
+        },
+
+        "css grid": {
+            "name": "CSS Grid",
+            "explain": (
+                "CSS Grid arranges items into rows and columns. "
+                "It is useful for layouts containing cards or "
+                "other two-dimensional arrangements."
+            ),
+            "example": (
+                ".cards {\n"
+                "    display: grid;\n"
+                "    grid-template-columns: repeat(3, 1fr);\n"
+                "    gap: 16px;\n"
+                "}\n\n"
+                "This creates three equal-width columns."
+            ),
+            "real_life": (
+                "CSS Grid can arrange the Study Materials cards "
+                "on your website into organised columns."
+            ),
+            "how": (
+                "Apply display: grid to a container, define columns "
+                "with grid-template-columns, and set spacing with gap."
+            ),
+            "mistakes": (
+                "Check the container width and column count. "
+                "Fixed-width columns can overflow small screens."
+            ),
+            "practice": (
+                "Practice: Create a two-column grid with a gap "
+                "of 20 pixels."
+            )
+        },
+
+        "javascript events": {
+            "name": "JavaScript events",
+            "explain": (
+                "An event is something that happens in a browser, "
+                "such as a click, a key press, or a form submission. "
+                "JavaScript can respond to these events."
+            ),
+            "example": (
+                "button.addEventListener('click', function() {\n"
+                "    alert('Button clicked!');\n"
+                "});\n\n"
+                "This runs the function when the button is clicked. "
+                "The variable button must refer to an HTML element."
+            ),
+            "real_life": (
+                "Events can make a website's theme toggle, "
+                "navigation controls, and interactive buttons work."
+            ),
+            "how": (
+                "Select an HTML element, call addEventListener(), "
+                "choose an event name, and provide a function "
+                "to run when that event occurs."
+            ),
+            "mistakes": (
+                "Check that the element exists before adding a "
+                "listener, and ensure the JavaScript runs after "
+                "the element is available."
+            ),
+            "practice": (
+                "Practice: Write a click event that changes a "
+                "heading's text."
+            )
+        },
+
+        "sql joins": {
+            "name": "SQL joins",
+            "explain": (
+                "A SQL JOIN combines related rows from two tables "
+                "using a matching column. INNER JOIN returns "
+                "matching rows from both tables."
+            ),
+            "example": (
+                "SELECT students.name, results.score\n"
+                "FROM students\n"
+                "INNER JOIN results\n"
+                "ON students.id = results.student_id;\n\n"
+                "This matches each student with their related "
+                "result using the student ID."
+            ),
+            "real_life": (
+                "A learning website can join student records "
+                "with quiz results to display each student's scores."
+            ),
+            "how": (
+                "Identify the two tables, find their related "
+                "columns, choose the type of join, and specify "
+                "the matching condition with ON."
+            ),
+            "mistakes": (
+                "Check that the join columns refer to the same "
+                "relationship. An incorrect join condition can "
+                "produce missing or duplicated results."
+            ),
+            "practice": (
+                "Practice: Suppose students has an id column and "
+                "results has a student_id column. Write an INNER "
+                "JOIN that matches the two tables."
+            )
+        },
+
+        "software testing": {
+            "name": "Software testing",
+            "explain": (
+                "Software testing checks whether a program behaves "
+                "as expected. Tests help identify defects before "
+                "users depend on the software."
+            ),
+            "example": (
+                "For a login form, test:\n"
+                "1. Correct email and password.\n"
+                "2. Incorrect password.\n"
+                "3. Empty fields.\n"
+                "4. An account that does not exist.\n\n"
+                "Check that each case produces the expected result."
+            ),
+            "real_life": (
+                "You can test Student Developer Hub by checking "
+                "student login, quiz scoring, lesson progress, "
+                "and the chatbot's responses."
+            ),
+            "how": (
+                "Write down the expected result, prepare test "
+                "inputs, run the feature, compare the actual result "
+                "with the expected result, and record defects."
+            ),
+            "mistakes": (
+                "Do not test only successful cases. Also test "
+                "invalid inputs, empty fields, and unusual cases."
+            ),
+            "practice": (
+                "Practice: Write three test cases for a quiz page, "
+                "including one incorrect or incomplete submission."
+            )
+        }
+    }
+
+
+    # Match a topic. Check specific topics before general ones.
+
+    # 1. Software testing
+    if any(phrase in text for phrase in [
+        "software testing", "test cases", "unit testing",
+        "testing software", "test my software", "test my code",
+        "how do i test", "check if my program works",
+        "find bugs in my code", "check whether my code works",
+        "test a program"
+    ]):
+        topic = "software testing"
+
+    # 2. SQL joins — before general database questions
+    elif any(phrase in text for phrase in [
+        "sql join", "sql joins", "inner join",
+        "joining tables", "combine data from two tables",
+        "combine two tables", "match related records"
+    ]):
+        topic = "sql joins"
+
+    # 3. Software engineering
+    elif any(phrase in text for phrase in [
+        "software engineering", "software development process",
+        "software development life cycle", "build software properly"
+    ]):
+        topic = "software engineering"
+
+    # 4. JavaScript events — before general JavaScript
+    elif any(phrase in text for phrase in [
+        "javascript event", "javascript events",
+        "addeventlistener", "click event", "button click",
+        "event listener", "make a button respond",
+        "run code when i click", "respond when clicked",
+        "what happens when a button is clicked"
+    ]):
+        topic = "javascript events"
+
+    # 5. General JavaScript
+    elif "javascript" in text or re.search(r"\bjs\b", text):
+        topic = "javascript"
+
+    # 6. HTML forms — before general HTML
+    elif any(phrase in text for phrase in [
+        "html form", "html forms", "form element",
+        "input field", "registration form", "login form",
+        "collect user information",
+        "collect information from students",
+        "collect information from a student",
+        "get information from a user",
+        "student registration",
+        "student details form"
+    ]):
+        topic = "html forms"
+
+    # 7. General HTML
+    elif any(phrase in text for phrase in [
+        "html", "web page structure", "structure a web page",
+        "page markup"
+    ]):
+        topic = "html"
+
+    # 8. CSS Grid
+    elif any(phrase in text for phrase in [
+        "css grid", "grid layout", "grid system",
+        "arrange cards in rows and columns",
+        "layout with rows and columns", "make a grid"
+    ]):
+        topic = "css grid"
+
+    # 9. CSS Flexbox
+    elif any(phrase in text for phrase in [
+        "flexbox", "css flexbox", "align items in a row",
+        "flexible layout", "align items with css"
+    ]):
+        topic = "css flexbox"
+
+    # 10. General CSS
+    elif any(phrase in text for phrase in [
+        "css", "styling", "style a web page",
+        "change the colour of a web page"
+    ]):
+        topic = "css"
+
+    # 11. Flask
+    elif any(phrase in text for phrase in [
+        "flask", "flask route", "app.route", "url route"
+    ]):
+        return (
+            "Flask is a Python framework for building web applications.\n\n"
+            "Example:\n"
+            "@app.route('/')\n"
+            "def home():\n"
+            "    return 'Welcome!'\n\n"
+            "A route connects a URL to a Python function. "
+            "In Student Developer Hub, Flask connects pages such as "
+            "the dashboard and chatbot to Python code."
+        )
+
+    # 12. SQL and databases
+    elif any(phrase in text for phrase in [
+        "database", "sqlite", "sql", "query", "queries",
+        "database table", "store information in a table"
+    ]):
+        topic = "database"
+
+    # 13. Algorithms
+    elif any(phrase in text for phrase in [
+        "algorithm", "algorithms", "steps to solve a problem",
+        "problem solving steps"
+    ]):
+        topic = "algorithm"
+
+    # 14. Variables
+    elif any(phrase in text for phrase in [
+        "variable", "variables", "store a value",
+        "save a value in python", "hold a value",
+        "what stores data in python"
+    ]):
+        topic = "variable"
+
+    # 15. Loops
+    elif any(phrase in text for phrase in [
+        "loop", "loops", "iteration", "iterations",
+        "for loop", "while loop", "repeat an instruction",
+        "repeat a task", "do something repeatedly"
+    ]):
+        topic = "loop"
+
+    # 16. Functions
+    elif any(phrase in text for phrase in [
+        "function", "functions",
+        "reusable block of code",
+        "create my own function",
+        "reuse code", "reusable code",
+        "create reusable code",
+        "write code once and reuse it",
+        "avoid repeating code"
+    ]):
+        topic = "function"
+
+    # 17. Lists
+    elif any(phrase in text for phrase in [
+        "list", "lists", "append", "collection of items",
+        "store multiple items in python"
+    ]):
+        topic = "list"
+
+    # 18. Data types
+    elif any(phrase in text for phrase in [
+        "data type", "data types", "integer", "float",
+        "boolean", "types of data", "kind of value"
+    ]):
+        topic = "data types"
+
+    # 19. Conditionals
+    elif any(phrase in text for phrase in [
+        "conditional", "conditionals", "if statement",
+        "if else", "if-else", "make a decision in python",
+        "check a condition", "choose based on a condition"
+    ]):
+        topic = "conditionals"
+
+    # 20. Dictionaries
+    elif any(phrase in text for phrase in [
+        "dictionary", "dictionaries", "key value",
+        "key-value pairs", "lookup by key",
+        "store information using keys"
+    ]):
+        topic = "dictionaries"
+
+    # 21. Python fallback
+    elif "python" in text or "programming" in text:
+        return (
+            "Python is a beginner-friendly programming language "
+            "used for websites, automation, data analysis, and more.\n\n"
+            "You can ask me about Python variables, loops, functions, "
+            "lists, dictionaries, or conditionals. For example, ask: "
+            "'How do I repeat a task in Python?'"
+        )
+
+    # 22. Greeting
+    elif any(word in text for word in [
+        "hello", "hi", "good morning", "good afternoon"
+    ]):
+        return (
+            "Hello! Welcome to Student Developer Hub. 😊\n\n"
+            "I can explain concepts, show examples, describe common "
+            "mistakes, and give practice tasks. Try asking about "
+            "Python, HTML, CSS, JavaScript, databases, or "
+            "software engineering."
+        )
+
+    # 23. Default fallback
+    else:
+        return (
+            "I haven't prepared an answer for that topic yet.\n\n"
+            "Try asking about variables, loops, functions, lists, "
+            "HTML, CSS, JavaScript, databases, SQL joins, algorithms, "
+            "or software engineering.\n\n"
+            "You can also ask for an example, a real-life use, "
+            "common mistakes, or a practice question."
+        )
+
+    # Return a response based on the student's learning need.
+    lesson = lessons[topic]
+
+    if intent == "practice":
+        return lesson["practice"]
+    elif intent == "mistakes":
+        return lesson["mistakes"]
+    elif intent == "real_life":
+        return lesson["real_life"]
+    elif intent == "example":
+        return lesson["example"]
+    elif intent == "how":
+        return lesson["how"]
+    else:
+        return lesson["explain"]
+@app.route("/chatbot", methods=["GET", "POST"])
+def chatbot():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    question = ""
+    answer = ""
+
+    if request.method == "POST":
+        question = request.form.get("question", "").strip()
+
+        if not question:
+            answer = "Please enter a question first."
+        elif len(question) > 1000:
+            answer = "Please keep your question under 1000 characters."
+        else:
+            answer = get_chatbot_answer(question)
+
+    return render_template(
+        "chatbot.html",
+        question=question,
+        answer=answer
+    )
+@app.route("/reviews", methods=["GET", "POST"])
+def reviews():
+    if "student_id" not in session:
+        flash("Please log in to access reviews.", "error")
+        return redirect(url_for("login"))
+
+    conn = get_db()
+
+    try:
+        if request.method == "POST":
+            rating_text = request.form.get("rating", "").strip()
+            review_text = request.form.get("review_text", "").strip()
+
+            if not rating_text.isdigit() or not 1 <= int(rating_text) <= 5:
+                flash("Please choose a rating from 1 to 5 stars.", "error")
+
+            elif not review_text or len(review_text) > 1000:
+                flash("Please enter feedback of up to 1000 characters.", "error")
+
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO reviews
+                    (student_id, rating, review_text)
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        session["student_id"],
+                        int(rating_text),
+                        review_text
+                    )
+                )
+                conn.commit()
+
+                flash("Thank you! Your review has been submitted.", "success")
+                return redirect(url_for("reviews"))
+
+        reviews_list = conn.execute(
+            """
+            SELECT students.name, reviews.rating,
+                   reviews.review_text, reviews.date_submitted
+            FROM reviews
+            JOIN students ON students.id = reviews.student_id
+            ORDER BY reviews.date_submitted DESC
+            """
+        ).fetchall()
+
+        summary = conn.execute(
+            """
+            SELECT AVG(rating) AS average_rating,
+                   COUNT(*) AS review_count
+            FROM reviews
+            """
+        ).fetchone()
+
+        average_rating = summary["average_rating"] or 0
+        review_count = summary["review_count"]
+
+        return render_template(
+            "reviews.html",
+            reviews=reviews_list,
+            average_rating=average_rating,
+            review_count=review_count
+        )
+
+    finally:
+        conn.close()
+
+@app.route("/progress")
+def progress():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    conn = get_db()
+    results = conn.execute(
+        """SELECT score, percentage, date_taken
+           FROM quiz_results
+           WHERE student_id = ?
+           ORDER BY id DESC""",
+        (session["student_id"],)
+    ).fetchall()
+    conn.close()
+
+    average = round(
+        sum(r["percentage"] for r in results) / len(results)
+    ) if results else 0
+
+    return render_template(
+        "progress.html",
+        results=results,
+        average=average
+    )
+
+@app.route("/leaderboard")
+def leaderboard():
+    # Only logged-in students can view the leaderboard
+    if "student_id" not in session:
+        return redirect("/login")
+
+    conn = get_db()
+
+    # Get each student's highest quiz percentage
+    results = conn.execute("""
+        SELECT students.id,
+               students.name,
+               MAX(quiz_results.percentage) AS best_percentage
+        FROM students
+        JOIN quiz_results
+            ON students.id = quiz_results.student_id
+        GROUP BY students.id, students.name
+        ORDER BY best_percentage DESC, students.name ASC
+    """).fetchall()
+
+    conn.close()
+
+    # Assign ranks; equal scores receive equal ranks
+    leaderboard_data = []
+    previous_score = None
+    current_rank = 0
+
+    for position, student in enumerate(results, start=1):
+        score = student["best_percentage"]
+
+        if score != previous_score:
+            current_rank = position
+            previous_score = score
+
+        leaderboard_data.append({
+            "rank": current_rank,
+            "name": student["name"],
+            "percentage": score
+        })
+
+    return render_template(
+        "leaderboard.html",
+        leaderboard=leaderboard_data
+    )
+
+# STEP 15: INTERACTIVE LEARNING CONTENT
+
+learning_pages = {
+    "python": {
+        "title": "Python Programming",
+        "intro": "Learn the basics of programming with Python.",
+        "lessons": [
+            {
+                "title": "Lesson 1: Variables",
+                "explanation": "Variables store information that a program can use later.",
+                "example": 'name = "Student"\nage = 20\nprint(name)\nprint(age)',
+                "output": "Student\n20"
+            },
+            {
+                "title": "Lesson 2: Data Types",
+                "explanation": "Common Python data types include strings, integers, floats, and booleans.",
+                "example": 'name = "Ada"\nage = 18\nscore = 85.5\nis_student = True\nprint(type(name))\nprint(type(age))',
+                "output": "<class 'str'>\n<class 'int'>"
+            },
+            {
+                "title": "Lesson 3: Conditions",
+                "explanation": "An if statement allows a program to make decisions.",
+                "example": 'score = 70\nif score >= 50:\n    print("Pass")\nelse:\n    print("Fail")',
+                "output": "Pass"
+            },
+            {
+                "title": "Lesson 4: Loops",
+                "explanation": "A for loop repeats instructions for each item in a sequence.",
+                "example": 'for number in range(1, 4):\n    print(number)',
+                "output": "1\n2\n3"
+            },
+            {
+                "title": "Lesson 5: Functions",
+                "explanation": "A function is a reusable block of code.",
+                "example": 'def greet(name):\n    print("Hello", name)\n\ngreet("Student")',
+                "output": "Hello Student"
+            },
+            {
+                "title": "Lesson 6: User Input",
+                "explanation": "The input() function allows users to enter information. It returns text.",
+                "example": 'name = input("Enter your name: ")\nprint("Hello", name)',
+                "output": "If the user enters Ada:\nHello Ada"
+            },
+            {
+                "title": "Lesson 7: Arithmetic Operators",
+                "explanation": "Python uses operators to perform calculations.",
+                "example": 'a = 10\nb = 3\nprint(a + b)\nprint(a * b)\nprint(a - b)',
+                "output": "13\n30\n7"
+            },
+            {
+                "title": "Lesson 8: Comparison Operators",
+                "explanation": "Comparison operators compare values and return True or False.",
+                "example": 'print(10 > 5)\nprint(4 == 7)\nprint(3 != 2)',
+                "output": "True\nFalse\nTrue"
+            },
+            {
+                "title": "Lesson 9: Lists",
+                "explanation": "A list stores multiple items in one variable.",
+                "example": 'subjects = ["Python", "HTML", "CSS"]\nprint(subjects)',
+                "output": "['Python', 'HTML', 'CSS']"
+            },
+            {
+                "title": "Lesson 10: List Indexing",
+                "explanation": "List indexing accesses an item using its position. Indexing starts at zero.",
+                "example": 'colors = ["red", "blue", "green"]\nprint(colors[1])',
+                "output": "blue"
+            },
+            {
+                "title": "Lesson 11: Dictionaries",
+                "explanation": "A dictionary stores information as key-value pairs.",
+                "example": 'student = {"name": "Ada", "level": 200}\nprint(student["name"])\nprint(student["level"])',
+                "output": "Ada\n200"
+            },
+            {
+                "title": "Lesson 12: While Loops",
+                "explanation": "A while loop repeats instructions while its condition remains True.",
+                "example": 'count = 1\nwhile count <= 3:\n    print(count)\n    count += 1',
+                "output": "1\n2\n3"
+            },
+            {
+                "title": "Lesson 13: Looping Through Lists",
+                "explanation": "A for loop can process each item in a list.",
+                "example": 'fruits = ["Mango", "Orange", "Apple"]\nfor fruit in fruits:\n    print(fruit)',
+                "output": "Mango\nOrange\nApple"
+            },
+            {
+                "title": "Lesson 14: Return Values",
+                "explanation": "The return statement sends a result back from a function.",
+                "example": 'def add(a, b):\n    return a + b\n\nresult = add(4, 6)\nprint(result)',
+                "output": "10"
+            },
+            {
+                "title": "Lesson 15: Importing Modules",
+                "explanation": "Modules provide reusable code and additional functions.",
+                "example": 'import math\nprint(math.sqrt(25))',
+                "output": "5.0"
+            },
+            {
+                "title": "Lesson 16: Handling Errors",
+                "explanation": "try and except allow a program to handle certain errors gracefully.",
+                "example": 'try:\n    number = int("hello")\nexcept ValueError:\n    print("Please enter a valid number.")',
+                "output": "Please enter a valid number."
+            },
+            {
+                "title": "Lesson 17: String Methods",
+                "explanation": "String methods can change the presentation of text or help inspect it.",
+                "example": 'name = "ada"\nprint(name.upper())\nprint(name.capitalize())',
+                "output": "ADA\nAda"
+            },
+            {
+                "title": "Lesson 18: File Handling",
+                "explanation": "Python can write text to a file and read it back. This example uses a practice file.",
+                "example": 'with open("practice.txt", "w") as file:\n    file.write("Hello student!")\n\nwith open("practice.txt", "r") as file:\n    print(file.read())',
+                "output": "Hello student!"
+            },
+            {
+                "title": "Lesson 19: Classes and Objects",
+                "explanation": "A class defines a type of object, and an object is an instance of that class.",
+                "example": 'class Student:\n    def __init__(self, name):\n        self.name = name\n\nstudent = Student("Ada")\nprint(student.name)',
+                "output": "Ada"
+            },
+            {
+                "title": "Lesson 20: Mini Project",
+                "explanation": "Combine variables, input, conditions, and output to create a simple pass-or-fail checker.",
+                "example": 'score = 75\nif score >= 50:\n    print("Pass")\nelse:\n    print("Try again")',
+                "output": "Pass"
+            }
+        ],
+        "resources": [
+            {
+                "title": "Official Python Tutorial",
+                "url": "https://docs.python.org/3/tutorial/"
+            },
+            {
+                "title": "Python Beginner's Guide",
+                "url": "https://wiki.python.org/python/BeginnersGuide.html"
+            }
+        ]
+    },
+
+    "html-css": {
+        "title": "HTML & CSS",
+        "intro": "Learn how to structure and style web pages.",
+        "lessons": [
+            {
+                "title": "Lesson 1: HTML Structure",
+                "explanation": "HTML defines the structure and content of a web page.",
+                "example": '<h1>My Website</h1>\n<p>Welcome to my first page.</p>',
+                "output": "A heading followed by a paragraph."
+            },
+            {
+                "title": "Lesson 2: Links",
+                "explanation": "The a element creates a clickable link.",
+                "example": '<a href="https://example.com">Visit Website</a>',
+                "output": "A clickable link labelled Visit Website."
+            },
+            {
+                "title": "Lesson 3: CSS Colors",
+                "explanation": "CSS controls how HTML elements look.",
+                "example": 'h1 {\n    color: blue;\n}',
+                "output": "The heading text appears blue."
+            },
+            {
+                "title": "Lesson 4: Spacing",
+                "explanation": "Margin adds space outside an element; padding adds space inside it.",
+                "example": '.card {\n    margin: 20px;\n    padding: 15px;\n}',
+                "output": "The card has outside and inside spacing."
+            },
+            {
+                "title": "Lesson 5: Classes",
+                "explanation": "An HTML class lets CSS style one or more elements.",
+                "example": '<p class="message">Hello student!</p>\n\n.message {\n    color: green;\n}',
+                "output": "The paragraph text appears green when the CSS is applied."
+            },
+            {
+                "title": "Lesson 6: Headings and Paragraphs",
+                "explanation": "HTML headings organize content, while paragraphs contain ordinary text.",
+                "example": "<h1>Welcome</h1>\n<h2>About Us</h2>\n<p>This is my website.</p>",
+                "output": "A main heading, a smaller heading, and a paragraph."
+            },
+            {
+                "title": "Lesson 7: Images",
+                "explanation": "The img element displays an image on a web page. The alt attribute describes it.",
+                "example": '<img src="student.jpg" alt="Student studying">',
+                "output": "The browser displays student.jpg if the file exists at that location."
+            },
+            {
+                "title": "Lesson 8: Lists",
+                "explanation": "HTML supports ordered lists and unordered lists.",
+                "example": "<ul>\n  <li>Python</li>\n  <li>HTML</li>\n</ul>",
+                "output": "A bulleted list containing Python and HTML."
+            },
+            {
+                "title": "Lesson 9: HTML Forms",
+                "explanation": "Forms collect information from users.",
+                "example": '<form>\n  <label for="name">Name:</label>\n  <input id="name" type="text">\n  <button type="submit">Submit</button>\n</form>',
+                "output": "A name field and a Submit button."
+            },
+            {
+                "title": "Lesson 10: Buttons",
+                "explanation": "Buttons provide clickable controls for users.",
+                "example": '<button type="button">Click Me</button>',
+                "output": "A clickable button appears on the page."
+            },
+            {
+                "title": "Lesson 11: CSS Selectors",
+                "explanation": "CSS selectors target HTML elements for styling.",
+                "example": "p {\n    color: blue;\n}\n\n.note {\n    color: green;\n}",
+                "output": "Paragraphs are blue, while elements with class note are green."
+            },
+            {
+                "title": "Lesson 12: Font Styling",
+                "explanation": "CSS font properties control the appearance of text.",
+                "example": "p {\n    font-size: 18px;\n    font-family: Arial, sans-serif;\n    font-weight: bold;\n}",
+                "output": "Paragraph text appears larger and bold."
+            },
+            {
+                "title": "Lesson 13: Borders",
+                "explanation": "The border property draws a line around an element.",
+                "example": ".card {\n    border: 2px solid black;\n}",
+                "output": "The card has a solid black border."
+            },
+            {
+                "title": "Lesson 14: The CSS Box Model",
+                "explanation": "The box model consists of content, padding, border, and margin.",
+                "example": ".card {\n    padding: 15px;\n    border: 1px solid gray;\n    margin: 10px;\n}",
+                "output": "The card has inner spacing, a border, and outer spacing."
+            },
+            {
+                "title": "Lesson 15: Flexbox",
+                "explanation": "Flexbox helps arrange elements in rows or columns.",
+                "example": ".container {\n    display: flex;\n    gap: 10px;\n}",
+                "output": "The container arranges its children in a row by default."
+            },
+            {
+                "title": "Lesson 16: CSS Grid",
+                "explanation": "CSS Grid arranges elements into rows and columns.",
+                "example": ".grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 15px;\n}",
+                "output": "The grid creates two equal-width columns."
+            },
+            {
+                "title": "Lesson 17: Responsive Design",
+                "explanation": "Media queries allow layouts to change for different screen sizes.",
+                "example": "@media (max-width: 600px) {\n    .container {\n        display: block;\n    }\n}",
+                "output": "The container uses block layout on screens up to 600 pixels wide."
+            },
+            {
+                "title": "Lesson 18: Hover Effects",
+                "explanation": "The :hover pseudo-class applies styles when a pointer moves over an element.",
+                "example": "button:hover {\n    background-color: blue;\n    color: white;\n}",
+                "output": "The button changes to a blue background with white text when hovered."
+            },
+            {
+                "title": "Lesson 19: Semantic HTML",
+                "explanation": "Semantic elements describe the purpose of page sections.",
+                "example": "<header>Website Header</header>\n<main>Main Content</main>\n<footer>Website Footer</footer>",
+                "output": "The page contains a header, main content area, and footer."
+            },
+            {
+                "title": "Lesson 20: Mini Website",
+                "explanation": "Combine HTML structure and CSS styling to create a simple page.",
+                "example": '<h1 class="welcome">Welcome Student</h1>\n<p>Start learning web development!</p>\n\n<style>\n.welcome {\n    color: green;\n}\n</style>',
+                "output": "A page displays a green heading and a paragraph."
+            }
+        ],
+        "resources": [
+            {
+                "title": "MDN Learn Web Development",
+                "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development"
+            },
+            {
+                "title": "MDN HTML Guide",
+                "url": "https://developer.mozilla.org/en-US/docs/Web/HTML"
+            },
+            {
+                "title": "MDN CSS Guide",
+                "url": "https://developer.mozilla.org/en-US/docs/Web/CSS"
+            }
+        ]
+    },
+
+    "javascript": {
+        "title": "JavaScript",
+        "intro": "Learn how to make websites interactive.",
+        "lessons": [
+            {
+                "title": "Lesson 1: Variables",
+                "explanation": "Use let or const to declare variables in JavaScript.",
+                "example": 'const name = "Student";\nlet score = 80;\nconsole.log(name);\nconsole.log(score);',
+                "output": "Student\n80"
+            },
+            {
+                "title": "Lesson 2: Conditions",
+                "explanation": "Conditions let JavaScript choose which instructions to run.",
+                "example": 'let score = 65;\nif (score >= 50) {\n    console.log("Pass");\n} else {\n    console.log("Fail");\n}',
+                "output": "Pass"
+            },
+            {
+                "title": "Lesson 3: Functions",
+                "explanation": "Functions group instructions that can be reused.",
+                "example": 'function greet() {\n    console.log("Hello student!");\n}\ngreet();',
+                "output": "Hello student!"
+            },
+            {
+                "title": "Lesson 4: Arrays",
+                "explanation": "An array stores multiple values in one variable.",
+                "example": 'const subjects = ["Python", "HTML", "JavaScript"];\nconsole.log(subjects[0]);',
+                "output": "Python"
+            },
+            {
+                "title": "Lesson 5: Events",
+                "explanation": "An event lets a web page respond to an action such as a button click.",
+                "example": '<button onclick="alert(\'Hello student!\')">Click Me</button>',
+                "output": "Clicking the button displays a greeting."
+            },
+            {
+                "title": "Lesson 6: Strings",
+                "explanation": "Strings store text in JavaScript.",
+                "example": 'const name = "Ada";\nconsole.log(name.toUpperCase());',
+                "output": "ADA"
+            },
+            {
+                "title": "Lesson 7: Numbers and Operators",
+                "explanation": "Arithmetic operators perform calculations.",
+                "example": "let a = 10;\nlet b = 3;\nconsole.log(a + b);\nconsole.log(a * b);",
+                "output": "13\n30"
+            },
+            {
+                "title": "Lesson 8: Comparison Operators",
+                "explanation": "Comparison operators compare values and return true or false.",
+                "example": "console.log(10 > 5);\nconsole.log(4 === 7);",
+                "output": "true\nfalse"
+            },
+            {
+                "title": "Lesson 9: Logical Operators",
+                "explanation": "Logical operators combine or reverse conditions.",
+                "example": "console.log(true && true);\nconsole.log(true || false);\nconsole.log(!true);",
+                "output": "true\ntrue\nfalse"
+            },
+            {
+                "title": "Lesson 10: For Loops",
+                "explanation": "A for loop repeats instructions a specified number of times.",
+                "example": 'for (let i = 1; i <= 3; i++) {\n    console.log(i);\n}',
+                "output": "1\n2\n3"
+            },
+            {
+                "title": "Lesson 11: While Loops",
+                "explanation": "A while loop repeats while its condition remains true.",
+                "example": "let count = 1;\nwhile (count <= 3) {\n    console.log(count);\n    count++;\n}",
+                "output": "1\n2\n3"
+            },
+            {
+                "title": "Lesson 12: Objects",
+                "explanation": "Objects store related information as properties.",
+                "example": 'const student = {name: "Ada", level: 200};\nconsole.log(student.name);\nconsole.log(student.level);',
+                "output": "Ada\n200"
+            },
+            {
+                "title": "Lesson 13: Array Length",
+                "explanation": "The length property tells you how many items an array contains.",
+                "example": 'const subjects = ["Python", "HTML", "CSS"];\nconsole.log(subjects.length);',
+                "output": "3"
+            },
+            {
+                "title": "Lesson 14: Adding Array Items",
+                "explanation": "The push() method adds an item to the end of an array.",
+                "example": 'const fruits = ["Mango", "Orange"];\nfruits.push("Apple");\nconsole.log(fruits);',
+                "output": "['Mango', 'Orange', 'Apple'] (shown as an array in the browser console)"
+            },
+            {
+                "title": "Lesson 15: Returning Values",
+                "explanation": "The return statement sends a result back from a function.",
+                "example": "function add(a, b) {\n    return a + b;\n}\nconsole.log(add(4, 6));",
+                "output": "10"
+            },
+            {
+                "title": "Lesson 16: Arrow Functions",
+                "explanation": "Arrow functions provide a shorter way to write functions.",
+                "example": "const double = number => number * 2;\nconsole.log(double(5));",
+                "output": "10"
+            },
+            {
+                "title": "Lesson 17: Selecting HTML Elements",
+                "explanation": "getElementById() selects an HTML element by its id.",
+                "example": '<p id="message">Hello student!</p>\n\n<script>\nconst item = document.getElementById("message");\nconsole.log(item.textContent);\n</script>',
+                "output": "Hello student!"
+            },
+            {
+                "title": "Lesson 18: Event Listeners",
+                "explanation": "An event listener runs a function when an event occurs.",
+                "example": '<button id="myButton">Click Me</button>\n\n<script>\ndocument.getElementById("myButton").addEventListener("click", function() {\n    alert("Button clicked!");\n});\n</script>',
+                "output": "Clicking the button displays an alert."
+            },
+            {
+                "title": "Lesson 19: Changing Page Content",
+                "explanation": "JavaScript can update the text inside an HTML element.",
+                "example": '<p id="result">Old message</p>\n\n<script>\ndocument.getElementById("result").textContent = "New message";\n</script>',
+                "output": "The paragraph displays New message."
+            },
+            {
+                "title": "Lesson 20: Mini Project",
+                "explanation": "Combine variables, functions, and conditions to check a student's result.",
+                "example": 'function checkResult(score) {\n    if (score >= 50) {\n        return "Pass";\n    }\n    return "Try again";\n}\nconsole.log(checkResult(75));',
+                "output": "Pass"
+            }
+
+        ],
+        "resources": [
+            {
+                "title": "MDN JavaScript Guide",
+                "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide"
+            },
+            {
+                "title": "JavaScript.info Tutorial",
+                "url": "https://javascript.info/"
+            },
+            {
+                "title": "W3Schools JavaScript Tutorial",
+                "url": "https://www.w3schools.com/js/"
+            }
+        ]
+    
+    },
+
+    "database": {
+        "title": "Database Systems",
+        "intro": "Learn how applications store and manage information.",
+        "lessons": [
+            {
+                "title": "Lesson 1: Tables",
+                "explanation": "A database table stores related information in rows and columns.",
+                "example": "Students\nid | name | level\n1  | Ada  | 200",
+                "output": "One table containing student records."
+            },
+            {
+                "title": "Lesson 2: SELECT",
+                "explanation": "SELECT retrieves information from a database table.",
+                "example": "SELECT * FROM students;",
+                "output": "All columns and rows from the students table."
+            },
+            {
+                "title": "Lesson 3: INSERT",
+                "explanation": "INSERT adds a new record to a table.",
+                "example": "INSERT INTO students (name, level)\nVALUES ('Ada', 200);",
+                "output": "A new student record is added."
+            },
+            {
+                "title": "Lesson 4: UPDATE",
+                "explanation": "UPDATE changes information in existing records.",
+                "example": "UPDATE students\nSET level = 300\nWHERE id = 1;",
+                "output": "The level is changed for the student with id 1."
+            },
+            {
+                "title": "Lesson 5: Primary Keys",
+                "explanation": "A primary key uniquely identifies each row in a table.",
+                "example": "id INTEGER PRIMARY KEY",
+                "output": "Each student record can have its own unique id."
+            },
+            {
+                "title": "Lesson 6: Data Types",
+                "explanation": "Data types describe the kind of information a database column stores.",
+                "example": "CREATE TABLE students (\n    id INTEGER,\n    name TEXT,\n    score REAL\n);",
+                "output": "A table structure with an integer, text, and real-number column."
+            },
+            {
+                "title": "Lesson 7: WHERE Clause",
+                "explanation": "WHERE filters records according to a condition.",
+                "example": "SELECT * FROM students\nWHERE level = 200;",
+                "output": "Students whose level is 200."
+            },
+            {
+                "title": "Lesson 8: ORDER BY",
+                "explanation": "ORDER BY sorts query results.",
+                "example": "SELECT * FROM students\nORDER BY name ASC;",
+                "output": "Student records sorted by name from A to Z."
+            },
+            {
+                "title": "Lesson 9: LIMIT",
+                "explanation": "LIMIT restricts the number of rows returned.",
+                "example": "SELECT * FROM students\nLIMIT 5;",
+                "output": "Up to five student records."
+            },
+            {
+                "title": "Lesson 10: COUNT",
+                "explanation": "COUNT() calculates how many records match a query.",
+                "example": "SELECT COUNT(*) FROM students;",
+                "output": "The number of records in the students table."
+            },
+            {
+                "title": "Lesson 11: Aggregate Functions",
+                "explanation": "Functions such as AVG(), MAX(), MIN(), and SUM() summarize numeric data.",
+                "example": "SELECT AVG(score) FROM results;",
+                "output": "The average score, assuming the results table has a score column."
+            },
+            {
+                "title": "Lesson 12: GROUP BY",
+                "explanation": "GROUP BY combines records with the same value for summary calculations.",
+                "example": "SELECT level, COUNT(*)\nFROM students\nGROUP BY level;",
+                "output": "A count of students for each level."
+            },
+            {
+                "title": "Lesson 13: LIKE",
+                "explanation": "LIKE searches text using patterns. The percent sign matches any number of characters.",
+                "example": "SELECT * FROM students\nWHERE name LIKE 'A%';",
+                "output": "Students whose names begin with A."
+            },
+            {
+                "title": "Lesson 14: NOT NULL",
+                "explanation": "NOT NULL prevents a column from storing a missing value.",
+                "example": "CREATE TABLE courses (\n    id INTEGER PRIMARY KEY,\n    title TEXT NOT NULL\n);",
+                "output": "Every course must have a title."
+            },
+            {
+                "title": "Lesson 15: UNIQUE Constraint",
+                "explanation": "UNIQUE prevents duplicate values in a column or combination of columns.",
+                "example": "CREATE TABLE users (\n    id INTEGER PRIMARY KEY,\n    email TEXT UNIQUE\n);",
+                "output": "The database rejects duplicate non-NULL email values."
+            },
+            {
+                "title": "Lesson 16: Foreign Keys",
+                "explanation": "A foreign key links records in related tables.",
+                "example": "CREATE TABLE quiz_results (\n    id INTEGER PRIMARY KEY,\n    student_id INTEGER,\n    FOREIGN KEY (student_id) REFERENCES students(id)\n);",
+                "output": "Each quiz result can reference a student record."
+            },
+            {
+                "title": "Lesson 17: INNER JOIN",
+                "explanation": "INNER JOIN combines records with matching values in related tables.",
+                "example": "SELECT students.name, quiz_results.score\nFROM students\nINNER JOIN quiz_results\nON students.id = quiz_results.student_id;",
+                "output": "Student names alongside their matching quiz scores."
+            },
+            {
+                "title": "Lesson 18: DELETE",
+                "explanation": "DELETE removes records. Always check the WHERE condition before deleting.",
+                "example": "DELETE FROM students\nWHERE id = 5;",
+                "output": "The student record with id 5 is deleted if it exists."
+            },
+            {
+                "title": "Lesson 19: Transactions",
+                "explanation": "Transactions group database changes so they can be committed or rolled back.",
+                "example": "BEGIN TRANSACTION;\nUPDATE students\nSET level = 300\nWHERE id = 1;\nCOMMIT;",
+                "output": "The change is committed if the transaction completes successfully."
+            },
+            {
+                "title": "Lesson 20: Parameterized Queries",
+                "explanation": "Parameterized queries safely pass values separately from SQL instructions.",
+                "example": "cursor.execute(\n    'SELECT * FROM students WHERE email = ?',\n    (email,)\n)",
+                "output": "The query searches using the supplied email value. In Python, cursor and email must already be defined."
+            }
+        ],
+        "resources": [
+            {
+                "title": "Official SQLite Documentation",
+                "url": "https://www.sqlite.org/docs.html"
+            },
+            {
+                "title": "SQLite SQL Language Reference",
+                "url": "https://www.sqlite.org/lang.html"
+            },
+            {
+                "title": "W3Schools SQL Tutorial",
+                "url": "https://www.w3schools.com/sql/"
+            }
+        ]
+    
+    },
+
+    "software-engineering": {
+        "title": "Software Engineering",
+        "intro": "Learn how software is planned, built, tested, and maintained.",
+        "lessons": [
+            {
+                "title": "Lesson 1: Introduction",
+                "explanation": "Software engineering applies organized methods to building and maintaining software.",
+                "example": "Problem → Requirements → Design → Development → Testing → Maintenance",
+                "output": "A simplified software development process."
+            },
+            {
+                "title": "Lesson 2: Requirements",
+                "explanation": "Requirements describe what a system should do and the constraints it must satisfy.",
+                "example": "Example requirement:\nStudents must be able to log in securely.",
+                "output": "A clear statement of a system's expected behaviour."
+            },
+            {
+                "title": "Lesson 3: System Design",
+                "explanation": "Design describes how the system's components work together.",
+                "example": "Browser → Flask application → SQLite database",
+                "output": "A simple view of a web application's architecture."
+            },
+            {
+                "title": "Lesson 4: Testing",
+                "explanation": "Testing checks whether software behaves as expected.",
+                "example": "Test: Enter valid login details.\nExpected result: The dashboard opens.",
+                "output": "Compare the actual result with the expected result."
+            },
+            {
+                "title": "Lesson 5: Maintenance",
+                "explanation": "Maintenance fixes problems and improves software after it has been released.",
+                "example": "Find a bug → Fix the code → Test the fix",
+                "output": "A basic maintenance process."
+            },
+            {
+                "title": "Lesson 6: Software Development Life Cycle",
+                "explanation": "The SDLC is a process for planning, building, testing, and maintaining software.",
+                "example": "Planning -> Requirements -> Design -> Coding -> Testing -> Maintenance",
+                "output": "A sequence of activities used to develop software."
+            },
+            {
+                "title": "Lesson 7: Agile Development",
+                "explanation": "Agile develops software in small increments and uses feedback to improve it.",
+                "example": "Plan a feature -> Build it -> Test it -> Get feedback -> Improve it",
+                "output": "A cycle of small improvements."
+            },
+            {
+                "title": "Lesson 8: User Stories",
+                "explanation": "A user story describes a feature from the user's point of view.",
+                "example": "As a student, I want to save learning materials so that I can study them later.",
+                "output": "A clear description of a student's need."
+            },
+            {
+                "title": "Lesson 9: Project Planning",
+                "explanation": "Project planning identifies tasks, deadlines, resources, and responsibilities.",
+                "example": "Task 1: Design pages\nTask 2: Build login\nTask 3: Test the website",
+                "output": "A simple list of project tasks."
+            },
+            {
+                "title": "Lesson 10: Version Control",
+                "explanation": "Version control tracks changes to files over time and helps developers work together.",
+                "example": "Git records changes to your project files.",
+                "output": "You can review previous versions and track changes."
+            },
+            {
+                "title": "Lesson 11: Git Basics",
+                "explanation": "Git commands help initialize repositories and record project changes.",
+                "example": "git init\ngit add .\ngit commit -m \"Initial project\"",
+                "output": "A repository is initialized, files are staged, and a commit is created after Git is configured."
+            },
+            {
+                "title": "Lesson 12: Code Readability",
+                "explanation": "Readable code uses clear names, consistent formatting, and simple structure.",
+                "example": "student_name = 'Ada'\nstudent_score = 85",
+                "output": "Descriptive variable names make the code easier to understand."
+            },
+            {
+                "title": "Lesson 13: Modular Programming",
+                "explanation": "Modular programming separates a system into smaller, manageable parts.",
+                "example": "Registration module\nLogin module\nLearning materials module",
+                "output": "Each module handles a specific responsibility."
+            },
+            {
+                "title": "Lesson 14: Unit Testing",
+                "explanation": "Unit testing checks whether a small part of a program behaves correctly.",
+                "example": "def add(a, b):\n    return a + b\n\nassert add(2, 3) == 5",
+                "output": "No assertion error occurs because the result is 5."
+            },
+            {
+                "title": "Lesson 15: Integration Testing",
+                "explanation": "Integration testing checks whether different parts of a system work together.",
+                "example": "Submit login form -> Flask checks credentials -> Database finds student -> Dashboard opens",
+                "output": "The login form, application, and database are tested together."
+            },
+            {
+                "title": "Lesson 16: Debugging",
+                "explanation": "Debugging means finding and correcting errors in software.",
+                "example": "Read the error message -> Locate the faulty code -> Correct it -> Test again",
+                "output": "A systematic process for fixing bugs."
+            },
+            {
+                "title": "Lesson 17: Error Handling",
+                "explanation": "Error handling helps an application respond safely when something goes wrong.",
+                "example": "try:\n    number = int('abc')\nexcept ValueError:\n    print('Invalid number')",
+                "output": "Invalid number"
+            },
+            {
+                "title": "Lesson 18: Documentation",
+                "explanation": "Documentation explains how software works and how to use or maintain it.",
+                "example": "# Student Developer Hub\nA website for programming lessons, quizzes, and student progress.",
+                "output": "A short project description for developers and users."
+            },
+            {
+                "title": "Lesson 19: Software Security",
+                "explanation": "Software security protects accounts and data from unauthorized access.",
+                "example": "Hash passwords\nValidate user input\nUse parameterized SQL queries\nProtect private routes",
+                "output": "Basic practices that help make an application safer."
+            },
+            {
+                "title": "Lesson 20: Deployment",
+                "explanation": "Deployment makes an application available in its intended environment.",
+                "example": "Test locally -> Configure production settings -> Deploy -> Monitor",
+                "output": "A simplified process for publishing and maintaining an application."
+            }
+        ],
+        "resources": [
+            {
+                "title": "Git Documentation",
+                "url": "https://git-scm.com/doc"
+            },
+            {
+                "title": "GitHub Skills",
+                "url": "https://skills.github.com/"
+            },
+            {
+                "title": "Atlassian Git Tutorials",
+                "url": "https://www.atlassian.com/git/tutorials"
+            }
+        ]
+    }
+}
+
+@app.route("/learn/<topic>")
+def learn(topic):
+    if "student_id" not in session:
+        return redirect("/login")
+
+    page = learning_pages.get(topic)
+
+    if page is None:
+        return redirect("/materials")
+
+    conn = get_db()
+
+    try:
+        student = conn.execute(
+            "SELECT id FROM students WHERE id = ?",
+            (session["student_id"],)
+        ).fetchone()
+
+        if student is None:
+            session.clear()
+            return redirect("/login")
+
+        rows = conn.execute(
+            """
+            SELECT lesson_index
+            FROM lesson_progress
+            WHERE student_id = ? AND topic = ?
+            """,
+            (student["id"], topic)
+        ).fetchall()
+
+        completed_lessons = {
+            row["lesson_index"] for row in rows
+        }
+
+    finally:
+        conn.close()
+
+    for index, lesson in enumerate(page["lessons"]):
+        if index < 7:
+            lesson["level"] = "Beginner"
+        elif index < 14:
+            lesson["level"] = "Intermediate"
+        else:
+            lesson["level"] = "Advanced"
+    total_lessons = len(page["lessons"])
+    completed_count = len(completed_lessons)
+
+    return render_template(
+        "learning.html",
+        page=page,
+        topic=topic,
+        completed_lessons=completed_lessons,
+        completed_count=completed_count,
+        total_lessons=total_lessons,
+        progress_percentage=round(
+            completed_count / total_lessons * 100
+        ) if total_lessons else 0
+    )
+@app.route("/complete-lesson/<topic>/<int:lesson_index>", methods=["POST"])
+def complete_lesson(topic, lesson_index):
+    if "student_id" not in session:
+        return redirect("/login")
+
+    page = learning_pages.get(topic)
+
+    if page is None:
+        return redirect("/materials")
+
+    if lesson_index < 0 or lesson_index >= len(page["lessons"]):
+        return redirect(f"/learn/{topic}")
+
+    conn = get_db()
+
+    try:
+        student = conn.execute(
+            "SELECT id FROM students WHERE id = ?",
+            (session["student_id"],)
+        ).fetchone()
+
+        if student is None:
+            session.clear()
+            return redirect("/login")
+
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO lesson_progress
+                (student_id, topic, lesson_index)
+            VALUES (?, ?, ?)
+            """,
+            (student["id"], topic, lesson_index)
+        )
+        conn.commit()
+
+    finally:
+        conn.close()
+
+    return redirect(f"/learn/{topic}")
+
+@app.route("/admin", methods=["GET", "POST"])
+def admin_login():
+    message = ""
+
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+
+        admin_password = app.config["ADMIN_PASSWORD"]
+
+        if (
+            admin_password
+            and username == app.config["ADMIN_USERNAME"]
+            and password == admin_password
+        ):
+            session.clear()
+            session["is_admin"] = True
+            return redirect("/admin/dashboard")
+
+        message = "Invalid admin credentials or admin password not configured."
+
+    return render_template("admin_login.html", message=message)
+
+
+@app.route("/admin/dashboard")
+def admin_dashboard():
+    if not session.get("is_admin"):
+        return redirect("/admin")
+
+    conn = get_db()
+    materials = conn.execute(
+        "SELECT * FROM materials ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
+
+    return render_template(
+        "admin_dashboard.html",
+        materials=materials
+    )
+
+
+@app.route("/admin/materials", methods=["POST"])
+def add_material():
+    if not session.get("is_admin"):
+        return redirect("/admin")
+
+    title = request.form.get("title", "").strip()
+    description = request.form.get("description", "").strip()
+    link = request.form.get("link", "").strip()
+
+    if not title or not description or not link:
+        return "Please complete all fields.", 400
+
+    if not link.startswith(("https://", "http://")):
+        return "Please enter a valid HTTP or HTTPS link.", 400
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO materials (title, description, link) VALUES (?, ?, ?)",
+        (title, description, link)
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect("/admin/dashboard")
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect("/admin")
+
+@app.route("/admin/materials/<int:material_id>/edit", methods=["GET", "POST"])
+def edit_material(material_id):
+    if not session.get("is_admin"):
+        return redirect("/admin")
+
+    conn = get_db()
+    material = conn.execute(
+        "SELECT * FROM materials WHERE id = ?",
+        (material_id,)
+    ).fetchone()
+
+    if material is None:
+        conn.close()
+        return "Material not found.", 404
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        link = request.form.get("link", "").strip()
+
+        if not title or not description or not link:
+            conn.close()
+            return "Please complete all fields.", 400
+
+        if not link.startswith(("https://", "http://")):
+            conn.close()
+            return "Please enter a valid HTTP or HTTPS link.", 400
+
+        conn.execute(
+            """UPDATE materials
+               SET title = ?, description = ?, link = ?
+               WHERE id = ?""",
+            (title, description, link, material_id)
+        )
+        conn.commit()
+        conn.close()
+        return redirect("/admin/dashboard")
+
+    conn.close()
+    return render_template("edit_material.html", material=material)
+
+
+@app.route("/admin/materials/<int:material_id>/delete", methods=["POST"])
+def delete_material(material_id):
+    if not session.get("is_admin"):
+        return redirect("/admin")
+
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM materials WHERE id = ?",
+        (material_id,)
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect("/admin/dashboard")
+
+@app.route("/profile", methods=["GET", "POST"])
+def profile():
+    if "student_id" not in session:
+        return redirect("/login")
+
+    conn = get_db()
+    error = ""
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        department = request.form.get("department", "").strip()
+        level = request.form.get("level", "").strip()
+        bio = request.form.get("bio", "").strip()
+
+        if not name:
+            error = "Your name cannot be empty."
+        else:
+            conn.execute("""
+                UPDATE students
+                SET name = ?, department = ?, level = ?, bio = ?
+                WHERE id = ?
+            """, (
+                name, department, level, bio,
+                session["student_id"]
+            ))
+            conn.commit()
+            conn.close()
+            return redirect("/profile")
+
+    student = conn.execute(
+        "SELECT * FROM students WHERE id = ?",
+        (session["student_id"],)
+    ).fetchone()
+
+    conn.close()
+
+    if student is None:
+        session.clear()
+        return redirect("/login")
+
+    return render_template(
+        "profile.html",
+        student=student,
+        error=error
+    )
+if __name__ == "__main__":
+    create_database()
+    app.run(debug=True)

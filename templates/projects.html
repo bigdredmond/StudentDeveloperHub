@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Project Ideas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <nav>
+        <h2>Student Developer Hub</h2>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/materials">Study Materials</a>
+        <a href="/profile">My Profile</a>
+        <a href="/progress">My Progress</a>
+        <a href="/quiz">Practice Quiz</a>
+        <a href="/projects">Project Ideas</a>
+        <a href="/logout">Logout</a>
+
+        <button type="button"
+                id="theme-toggle"
+                class="theme-toggle"
+                aria-pressed="false">
+            🌙 Dark mode
+        </button>
+    </nav>
+
+    <section class="materials-section">
+        <h1>20 Student Project Ideas</h1>
+        <p>Choose a project, learn new skills, and build something useful.</p>
+
+        <p><b>Total Projects:</b> 20</p>
+
+        <input
+            type="text"
+            id="search"
+            placeholder="Search projects, technologies, or levels..."
+            oninput="searchProjects()"
+            aria-label="Search projects"
+        >
+
+        <div class="materials-grid" id="projectsGrid">
+
+            <div class="material-card">
+                <h3>💰 1. Daily Expense Tracker</h3>
+                <p>Record daily expenses and calculate remaining money.</p>
+                <p><b>Technology:</b> Python, SQLite</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Add expenses, view totals, calculate balance.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🎓 2. Student Result System</h3>
+                <p>Calculate student totals, averages, grades, and class results.</p>
+                <p><b>Technology:</b> Python, Flask, SQLite</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Enter scores, calculate grades, view results.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🏪 3. Store Sales Manager</h3>
+                <p>Record products sold and calculate daily sales.</p>
+                <p><b>Technology:</b> Python, SQLite</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Products, quantities, prices, sales reports.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🌦️ 4. Weather Application</h3>
+                <p>Display current weather for selected Nigerian cities.</p>
+                <p><b>Technology:</b> Python, Flask, Weather API</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> City search, temperature, weather conditions.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🗳️ 5. Community Voting System</h3>
+                <p>Allow eligible users to vote and view project results.</p>
+                <p><b>Technology:</b> Flask, SQLite</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Voting options, vote validation, percentages.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>📚 6. Online Learning Platform</h3>
+                <p>Provide lessons, quizzes, and student accounts.</p>
+                <p><b>Technology:</b> Flask, HTML, CSS, SQLite</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Lessons, quizzes, profiles, progress tracking.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>📅 7. Student Study Planner</h3>
+                <p>Organise study schedules, subjects, and deadlines.</p>
+                <p><b>Technology:</b> Flask, SQLite, CSS</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Add tasks, set dates, track completion.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>📋 8. Attendance Management System</h3>
+                <p>Record student attendance and calculate attendance rates.</p>
+                <p><b>Technology:</b> Python, Flask, SQLite</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Present or absent records, attendance reports.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🌐 9. Developer Portfolio Builder</h3>
+                <p>Create a personal website to showcase skills and projects.</p>
+                <p><b>Technology:</b> HTML, CSS, JavaScript</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> About section, projects, contact information.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>💻 10. Coding Practice Tracker</h3>
+                <p>Save coding exercises and track completed challenges.</p>
+                <p><b>Technology:</b> Flask, SQLite, JavaScript</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Code examples, categories, completion status.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>📖 11. Digital Library System</h3>
+                <p>Organise books and learning resources in a searchable catalogue.</p>
+                <p><b>Technology:</b> Flask, SQLite</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Book search, categories, borrowing records.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>⏰ 12. Assignment Reminder System</h3>
+                <p>Manage assignments and remember upcoming deadlines.</p>
+                <p><b>Technology:</b> Flask, SQLite, JavaScript</p>
+                <p><b>Level:</b> Beginner</p>
+                <p><b>Features:</b> Due dates, task status, overdue tasks.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>💬 13. Student Discussion Forum</h3>
+                <p>Let students ask questions and share knowledge.</p>
+                <p><b>Technology:</b> Flask, SQLite</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Posts, replies, topic categories, moderation.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🛍️ 14. Campus Marketplace</h3>
+                <p>Allow students to list and discover second-hand textbooks and supplies.</p>
+                <p><b>Technology:</b> Flask, SQLite, HTML/CSS</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Listings, search, item details, enquiries.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>👥 15. Group Project Manager</h3>
+                <p>Help student teams organise tasks and share responsibilities.</p>
+                <p><b>Technology:</b> Flask, SQLite, JavaScript</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Teams, task assignments, deadlines, status.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🧩 16. Code Snippet Library</h3>
+                <p>Save and search useful pieces of reusable programming code.</p>
+                <p><b>Technology:</b> Flask, SQLite, HTML/CSS</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Code storage, language tags, search, categories.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🧠 17. Skills Assessment Platform</h3>
+                <p>Test programming knowledge and monitor topic-by-topic progress.</p>
+                <p><b>Technology:</b> Flask, SQLite, JavaScript</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Assessments, scores, feedback, progress reports.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🖥️ 18. Computer Lab Inventory</h3>
+                <p>Keep records of computers and other laboratory equipment.</p>
+                <p><b>Technology:</b> Flask, SQLite</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Equipment records, quantities, maintenance status.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🏠 19. Campus Accommodation Board</h3>
+                <p>Organise accommodation listings and student enquiries.</p>
+                <p><b>Technology:</b> Flask, SQLite, HTML/CSS</p>
+                <p><b>Level:</b> Intermediate</p>
+                <p><b>Features:</b> Listings, location details, search, enquiries.</p>
+            </div>
+
+            <div class="material-card">
+                <h3>🏆 20. Programming Challenge Hub</h3>
+                <p>Publish coding challenges and track student participation.</p>
+                <p><b>Technology:</b> Flask, SQLite, JavaScript</p>
+                <p><b>Level:</b> Advanced</p>
+                <p><b>Features:</b> Challenges, submissions, scores, leaderboard.</p>
+            </div>
+
+        </div>
+
+        <p id="noProjects" hidden>No matching projects found. Try another search.</p>
+    </section>
+
+    <script>
+        function searchProjects() {
+            const input = document.getElementById("search").value
+                .toLowerCase().trim();
+
+            const cards = document.querySelectorAll(
+                "#projectsGrid .material-card"
+            );
+
+            let visibleCount = 0;
+
+            cards.forEach(function(card) {
+                const matches = card.textContent
+                    .toLowerCase().includes(input);
+
+                card.style.display = matches ? "" : "none";
+
+                if (matches) {
+                    visibleCount++;
+                }
+            });
+
+            document.getElementById("noProjects").hidden =
+                visibleCount !== 0;
+        }
+    </script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>
