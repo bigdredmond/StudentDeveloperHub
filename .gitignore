@@ -23,3 +23,4 @@ instance/
 StudentDeveloperHub_Backups/
 backup/
 backups/
+students_backup.db
