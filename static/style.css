@@ -2186,3 +2186,467 @@ nav .brand-title {
     color: #ffffff;
     transform: translateY(-2px);
 }
+/* ==========================================
+   STUDENT DEVELOPER HUB - MOBILE REDESIGN
+   Add this block at the bottom of style.css
+   ========================================== */
+
+/* Prevent horizontal scrolling on all pages */
+html {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+img,
+video,
+iframe {
+    max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+    max-width: 100%;
+}
+
+button,
+input[type="submit"],
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input[type="submit"] {
+    min-height: 44px;
+}
+
+/* Keep content centred and within the screen */
+.materials-section,
+.material-search,
+.learning-page,
+.leaderboard-page {
+    width: 100%;
+    max-width: 1100px;
+    min-width: 0;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.card,
+.material-card,
+.stat-card,
+.learning-lesson,
+.topic-section,
+.leaderboard-section,
+.profile-container,
+.form-container {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Make wide tables scroll inside their own area */
+table {
+    max-width: 100%;
+}
+
+.leaderboard-table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+pre {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+textarea {
+    resize: vertical;
+}
+
+/* Tablet layout */
+@media (max-width: 900px) {
+    .materials-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .features {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .developer-hero {
+        gap: 20px;
+    }
+}
+
+/* Phone layout */
+@media (max-width: 600px) {
+    body {
+        font-size: 15px;
+        line-height: 1.6;
+    }
+
+    h1 {
+        font-size: 1.7rem;
+        line-height: 1.25;
+    }
+
+    h2 {
+        font-size: 1.35rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    /* Navigation: compact, wrapped links */
+    nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 6px;
+        padding: 12px;
+    }
+
+    nav h2,
+    nav .brand-title {
+        width: 100%;
+        margin: 0 0 5px;
+        font-size: 1.15rem;
+        overflow-wrap: anywhere;
+    }
+
+    nav a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        min-height: 40px;
+        margin: 0;
+        padding: 8px 10px;
+        font-size: 0.85rem;
+        overflow-wrap: anywhere;
+    }
+
+    nav .nav-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: 100%;
+    }
+
+    nav .review-nav-link {
+        margin: 0 !important;
+        padding: 8px 10px;
+    }
+
+    nav .theme-toggle,
+    nav button#theme-toggle {
+        min-height: 40px;
+        margin: 0 !important;
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+
+    /* Dashboard profile and content */
+    .dashboard-layout {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-height: 100vh;
+    }
+
+    .profile-sidebar {
+        width: 100%;
+        min-width: 0;
+        padding: 10px 14px;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .profile-sidebar .profile-card {
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        gap: 12px;
+        padding: 10px;
+        font-size: 0.95rem;
+    }
+
+    .profile-avatar {
+        width: 42px;
+        height: 42px;
+        min-width: 42px;
+        font-size: 20px;
+    }
+
+    .dashboard-main {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .dashboard-main nav {
+        padding: 12px;
+    }
+
+    .hero {
+        margin: 12px;
+        padding: 20px 16px;
+        border-radius: 14px;
+    }
+
+    .hero h1 {
+        font-size: 1.7rem;
+    }
+
+    .hero p {
+        font-size: 0.95rem;
+    }
+
+    .developer-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 18px;
+        margin: 12px;
+        padding: 20px 16px;
+        border-radius: 15px;
+    }
+
+    .developer-hero h1 {
+        font-size: 1.7rem;
+    }
+
+    .developer-hero .hero-message {
+        font-size: 0.95rem;
+        line-height: 1.7;
+    }
+
+    .hero-code {
+        flex: auto;
+        width: 100%;
+        min-width: 0;
+        padding: 14px;
+    }
+
+    .hero-code pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.8rem;
+    }
+
+    /* Statistics and dashboard cards */
+    .dashboard-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 0 12px;
+        margin-bottom: 18px;
+    }
+
+    .stat-card {
+        padding: 13px;
+    }
+
+    .stat-card h2 {
+        font-size: 1.4rem;
+        overflow-wrap: anywhere;
+    }
+
+    .stat-card p {
+        font-size: 0.82rem;
+    }
+
+    .stat-card span {
+        font-size: 0.75rem;
+    }
+
+    .features {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        width: 100%;
+        padding: 0 12px 22px;
+    }
+
+    .features .card {
+        width: 100%;
+        min-height: 0;
+        padding: 18px;
+    }
+
+    .features .card a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        max-width: 100%;
+    }
+
+    /* Study materials and lessons */
+    .materials-section,
+    .material-search,
+    .learning-page,
+    .leaderboard-page {
+        width: 100%;
+        margin: 12px auto;
+        padding: 12px;
+    }
+
+    .materials-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .material-card,
+    .learning-lesson {
+        width: 100%;
+        padding: 17px;
+    }
+
+    .topic-section,
+    .learning-header {
+        width: calc(100% - 24px);
+        margin: 12px auto;
+        padding: 17px;
+    }
+
+    .learning-header h1 {
+        font-size: 1.65rem;
+    }
+
+    .learning-lesson pre {
+        padding: 12px;
+        font-size: 0.82rem;
+    }
+
+    .learning-lesson code {
+        font-size: 0.82rem;
+        overflow-wrap: anywhere;
+    }
+
+    .lesson-filters {
+        gap: 8px;
+    }
+
+    .level-filter {
+        min-height: 42px;
+        padding: 9px 12px;
+    }
+
+    .learning-button,
+    .continue-learning-btn,
+    .hero a.get-started {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        min-height: 44px;
+        padding: 11px 14px;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    /* Login, registration and profile forms */
+    .form-container,
+    .profile-container {
+        width: calc(100% - 24px);
+        max-width: 450px;
+        margin: 18px auto;
+        padding: 18px;
+    }
+
+    .form-container input,
+    .profile-container input,
+    .profile-container textarea,
+    input:not([type="radio"]):not([type="checkbox"]),
+    select,
+    textarea {
+        min-width: 0;
+        font-size: 16px;
+    }
+
+    .form-container button,
+    .profile-container button {
+        width: 100%;
+        min-height: 46px;
+    }
+
+    /* Chatbot */
+    .chatbot-nav {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .chatbot-nav div {
+        gap: 8px;
+    }
+
+    .chatbot-container {
+        width: 100%;
+        margin: 12px auto;
+        padding: 12px;
+    }
+
+    .chat-window {
+        min-width: 0;
+        padding: 13px;
+    }
+
+    .chat-message {
+        max-width: 96%;
+        padding: 11px 12px;
+    }
+
+    .chat-input-form button {
+        width: 100%;
+        min-height: 46px;
+    }
+
+    /* Leaderboard and other tables */
+    .leaderboard-section {
+        padding: 12px;
+    }
+
+    .leaderboard-table th,
+    .leaderboard-table td,
+    th,
+    td {
+        padding: 8px;
+        font-size: 0.8rem;
+    }
+
+    /* Prevent oversized headings and links */
+    p,
+    a,
+    label,
+    td,
+    th {
+        overflow-wrap: anywhere;
+    }
+
+    /* Reduce hover movement on touch devices */
+    .card:hover,
+    .material-card:hover,
+    .features .card:hover,
+    .stat-card:hover,
+    .learning-lesson:hover {
+        transform: none;
+    }
+}
