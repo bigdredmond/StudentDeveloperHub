@@ -2485,7 +2485,7 @@ def complete_lesson(topic, lesson_index):
             VALUES (%s, %s, %s)
             ON CONFLICT (student_id, topic, lesson_index)
             DO NOTHING
-        """, (student_id, topic, lesson_index))
+        """, (session["student_id"], topic, lesson_index))
         conn.commit()
 
     finally:
