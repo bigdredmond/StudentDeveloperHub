@@ -26,7 +26,15 @@
             <button type="submit">Login</button>
         </form>
 
-        <p>Don't have an account? <a href="/register">Register here</a></p>
+        <p>
+            <a href="{{ url_for('forgot_password') }}">
+                Forgot Password?
+            </a>
+        </p>
+
+        <p>Don't have an account?
+            <a href="/register">Register here</a>
+        </p>
 
         <a href="/">Back to Home</a>
     </div>
